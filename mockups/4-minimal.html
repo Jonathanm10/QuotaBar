@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>QuotaBar · Minimal</title>
+<style>
+  :root{
+    --bg:#0b0b0d;--panel:#0f1012;--line:#1c1d21;
+    --ink:#e9eaec;--ink2:#9095a0;--ink3:#5b6170;
+    --ok:#10b981;--warn:#eab308;--crit:#ef4444;
+    --accent:#a1a1aa;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg);color:var(--ink);
+    min-height:100vh;display:grid;place-items:center;padding:32px;
+    font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;
+  }
+  .frame{
+    width:380px;border-radius:14px;overflow:hidden;
+    background:var(--panel);border:1px solid var(--line);
+    box-shadow:0 24px 60px rgba(0,0,0,.55);
+  }
+  .head{
+    display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);
+  }
+  .title{font-weight:600;letter-spacing:-.2px}
+  .dim{color:var(--ink3);font-size:11px;letter-spacing:.4px;text-transform:uppercase}
+  .spacer{flex:1}
+  .group{padding:6px 6px 10px}
+  .sec-label{
+    padding:12px 14px 6px;font-size:10px;letter-spacing:1.2px;color:var(--ink3);
+    text-transform:uppercase;display:flex;align-items:center;gap:8px;
+  }
+  .sec-label .bar{flex:1;height:1px;background:var(--line)}
+  .line{
+    display:grid;grid-template-columns:18px 1fr auto;gap:10px;align-items:center;
+    padding:9px 14px;cursor:default;border-radius:8px;
+  }
+  .line:hover{background:rgba(255,255,255,.03)}
+  .swatch{
+    width:10px;height:10px;border-radius:2px;justify-self:center;
+    background:var(--accent);
+  }
+  .swatch.oai{background:#10a37f} .swatch.ant{background:#d97757}
+  .lbl{font-weight:500}
+  .sub{color:var(--ink3);font-size:11px}
+  .v{
+    font-variant-numeric:tabular-nums;font-weight:600;letter-spacing:-.2px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .mini{
+    width:56px;height:4px;background:#1a1b1f;border-radius:2px;overflow:hidden;
+  }
+  .mini > div{height:100%;border-radius:inherit;transition:width .5s ease, background .3s}
+  .pct{min-width:36px;text-align:right}
+  .pct.ok{color:var(--ok)} .pct.warn{color:var(--warn)} .pct.crit{color:var(--crit)}
+  .meta{
+    padding:10px 14px 12px;display:flex;gap:16px;flex-wrap:wrap;color:var(--ink3);font-size:11px;
+    border-top:1px solid var(--line);
+  }
+  .meta b{color:var(--ink2);font-weight:500}
+  .foot{
+    padding:10px 14px;border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:10px;color:var(--ink3);font-size:11px;
+  }
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+  .btn{
+    background:transparent;border:0;color:var(--ink2);font:inherit;font-size:11px;
+    padding:2px 0;cursor:pointer;border-bottom:1px dotted var(--line);
+  }
+  .btn:hover{color:var(--ink)}
+  .chev{color:var(--ink3);font-size:11px;margin-left:4px}
+  details summary{list-style:none;cursor:pointer}
+  details summary::-webkit-details-marker{display:none}
+  details[open] .chev{transform:rotate(90deg)}
+  .chev{display:inline-block;transition:transform .2s}
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div class="head">
+      <span class="title">QuotaBar</span>
+      <span class="dim">· quota at a glance</span>
+      <span class="spacer"></span>
+      <button class="btn">refresh</button>
+    </div>
+
+    <div class="sec-label">Daily <span class="bar"></span> resets 00:00</div>
+    <div class="group" id="daily"></div>
+
+    <div class="sec-label">Weekly <span class="bar"></span> resets Mon</div>
+    <div class="group" id="weekly"></div>
+
+    <details>
+      <summary class="sec-label" style="cursor:pointer">
+        Reserve <span class="bar"></span> <span class="chev">›</span>
+      </summary>
+      <div class="group" id="reserve"></div>
+    </details>
+
+    <div class="foot">
+      <span class="dot"></span>
+      <span>live</span>
+      <span class="spacer" style="flex:1"></span>
+      <span id="age">updated 8s ago</span>
+    </div>
+  </div>
+
+<script>
+  const rows = {
+    daily: [
+      { id:'oai', label:'OpenAI',    sub:'5h · OAuth',   pct:34, reset:'4h 10m' },
+      { id:'ant', label:'Anthropic', sub:'5h · OAuth',   pct:72, reset:'2h 40m' },
+    ],
+    weekly: [
+      { id:'oai', label:'OpenAI',    sub:'7d · OAuth',   pct:61, reset:'3d 4h' },
+      { id:'ant', label:'Anthropic', sub:'7d · OAuth',   pct:88, reset:'1d 9h' },
+    ],
+    reserve: [
+      { id:'oai', label:'OpenAI',    sub:'credits',      val:'$12.40', pct:80 },
+      { id:'ant', label:'Anthropic', sub:'extra usage',  val:'18%',     pct:18 },
+    ],
+  };
+  const klass = p => p<50?'ok':p<75?'warn':'crit';
+  const color = p => p<50?'var(--ok)':p<75?'var(--warn)':'var(--crit)';
+
+  function fillWindow(key){
+    const el = document.getElementById(key);
+    el.innerHTML = rows[key].map(r => `
+      <div class="line" title="${r.label} ${r.pct}%">
+        <div class="swatch ${r.id}"></div>
+        <div>
+          <div class="lbl">${r.label}</div>
+          <div class="sub">${r.sub} · resets in ${r.reset}</div>
+        </div>
+        <div class="v">
+          <div class="mini"><div style="width:${r.pct}%;background:${color(r.pct)}"></div></div>
+          <div class="pct ${klass(r.pct)}">${r.pct}%</div>
+        </div>
+      </div>
+    `).join('');
+  }
+  function fillReserve(){
+    const el = document.getElementById('reserve');
+    el.innerHTML = rows.reserve.map(r => `
+      <div class="line">
+        <div class="swatch ${r.id}"></div>
+        <div>
+          <div class="lbl">${r.label}</div>
+          <div class="sub">${r.sub}</div>
+        </div>
+        <div class="v">
+          <div class="mini"><div style="width:${r.pct}%;background:var(--ok)"></div></div>
+          <div class="pct ok">${r.val}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+  fillWindow('daily'); fillWindow('weekly'); fillReserve();
+
+  // Live ticker for the age label
+  const ageEl = document.getElementById('age');
+  let t = 8;
+  setInterval(()=>{ t+=1; ageEl.textContent = `updated ${t}s ago`; if(t>59){t=0;} },1000);
+</script>
+</body>
+</html>

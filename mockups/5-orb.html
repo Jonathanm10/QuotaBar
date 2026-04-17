@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>QuotaBar · Orb</title>
+<style>
+  :root{
+    --bg:#07080c;--line:rgba(255,255,255,.08);
+    --ink:#f2f4f7;--ink2:#a7adba;--ink3:#6b7280;
+    --ok:#34d399;--warn:#f59e0b;--crit:#ef4444;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(500px 300px at 20% 20%, rgba(16,163,127,.25), transparent 60%),
+      radial-gradient(500px 300px at 80% 80%, rgba(217,119,87,.22), transparent 60%),
+      var(--bg);
+    color:var(--ink);min-height:100vh;display:grid;place-items:center;padding:32px;
+    font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;
+  }
+  .frame{
+    width:380px;border-radius:20px;overflow:hidden;position:relative;
+    background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+    backdrop-filter:blur(30px) saturate(140%);
+    -webkit-backdrop-filter:blur(30px) saturate(140%);
+    border:1px solid var(--line);
+    box-shadow:
+      0 30px 80px rgba(0,0,0,.6),
+      inset 0 1px 0 rgba(255,255,255,.06),
+      inset 0 -1px 0 rgba(0,0,0,.3);
+  }
+  .grain{
+    position:absolute;inset:0;pointer-events:none;opacity:.5;mix-blend-mode:overlay;
+    background-image:radial-gradient(rgba(255,255,255,.06) 1px, transparent 1px);
+    background-size:3px 3px;
+  }
+  .head{
+    display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);
+    position:relative;z-index:1;
+  }
+  .title{font-weight:700;letter-spacing:-.1px}
+  .kicker{font-size:10px;letter-spacing:.9px;color:var(--ink3);text-transform:uppercase}
+  .spacer{flex:1}
+  .btn{
+    background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--ink2);
+    padding:5px 9px;border-radius:8px;cursor:pointer;font:inherit;font-size:11px;
+    transition:.15s;
+  }
+  .btn:hover{color:var(--ink);background:rgba(255,255,255,.08)}
+
+  .body{padding:16px;display:flex;flex-direction:column;gap:14px;position:relative;z-index:1}
+  .orbwrap{
+    background:linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.015));
+    border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;gap:14px;align-items:center;
+    position:relative;overflow:hidden;
+  }
+  .orb{
+    --p:0;--c1:#34d399;--c2:#059669;
+    position:relative;width:96px;height:96px;flex:0 0 96px;border-radius:50%;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 55%),
+      radial-gradient(circle at 70% 80%, rgba(0,0,0,.35), transparent 55%),
+      linear-gradient(180deg, var(--c1), var(--c2));
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,.08) inset,
+      0 20px 30px rgba(0,0,0,.4),
+      0 0 40px color-mix(in srgb, var(--c1) 50%, transparent);
+    overflow:hidden;
+  }
+  .orb .wave{
+    position:absolute;left:-20%;right:-20%;
+    bottom: calc(var(--p) * 1% - 100%);
+    height:200%;
+    background:linear-gradient(180deg, rgba(255,255,255,.2), rgba(255,255,255,.05));
+    border-radius:42% 45% 0 0 / 40% 42% 0 0;
+    animation:slosh 5s ease-in-out infinite alternate;
+    transition:bottom .8s cubic-bezier(.2,.8,.2,1);
+    filter:blur(.5px);
+  }
+  .orb .wave.b{ opacity:.55; animation-duration:7s; animation-delay:-2s; }
+  .orb .pct{
+    position:absolute;inset:0;display:grid;place-items:center;
+    font-weight:800;font-size:22px;letter-spacing:-.5px;font-variant-numeric:tabular-nums;
+    text-shadow:0 2px 10px rgba(0,0,0,.5);
+  }
+  @keyframes slosh{
+    0%{ transform:translateX(-6%) rotate(-2deg); }
+    100%{ transform:translateX(6%) rotate(2deg); }
+  }
+  .info{flex:1;min-width:0}
+  .brand{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .badge{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font-weight:800;font-size:10px}
+  .badge.oai{background:#10a37f;color:#001}
+  .badge.ant{background:#d97757;color:#2a1305}
+  .name{font-weight:700}
+  .sub{color:var(--ink3);font-size:11px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .stat{
+    background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:8px;
+    padding:7px 9px;
+  }
+  .stat .k{font-size:10px;color:var(--ink3);letter-spacing:.5px;text-transform:uppercase}
+  .stat .v{font-weight:700;font-variant-numeric:tabular-nums;font-size:13px;margin-top:1px}
+  .v.ok{color:var(--ok)} .v.warn{color:var(--warn)} .v.crit{color:var(--crit)}
+
+  .foot{
+    padding:12px 16px;border-top:1px solid var(--line);
+    display:flex;align-items:center;gap:10px;color:var(--ink3);font-size:11px;position:relative;z-index:1;
+  }
+  .live{display:inline-flex;align-items:center;gap:6px}
+  .live i{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+</style>
+</head>
+<body>
+  <div class="frame">
+    <div class="grain"></div>
+    <div class="head">
+      <div>
+        <div class="title">QuotaBar</div>
+        <div class="kicker">Two orbs · two providers</div>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn" id="step">Next scenario</button>
+    </div>
+
+    <div class="body">
+      <div class="orbwrap" data-prov="oai">
+        <div class="orb" data-orb>
+          <div class="wave"></div>
+          <div class="wave b"></div>
+          <div class="pct" data-pct>—</div>
+        </div>
+        <div class="info">
+          <div class="brand"><div class="badge oai">O</div><div class="name">OpenAI</div></div>
+          <div class="sub" data-sub>—</div>
+          <div class="stats">
+            <div class="stat"><div class="k">Weekly</div><div class="v" data-wk>—</div></div>
+            <div class="stat"><div class="k">Resets</div><div class="v" data-reset>—</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="orbwrap" data-prov="ant">
+        <div class="orb" data-orb>
+          <div class="wave"></div>
+          <div class="wave b"></div>
+          <div class="pct" data-pct>—</div>
+        </div>
+        <div class="info">
+          <div class="brand"><div class="badge ant">A</div><div class="name">Anthropic</div></div>
+          <div class="sub" data-sub>—</div>
+          <div class="stats">
+            <div class="stat"><div class="k">Weekly</div><div class="v" data-wk>—</div></div>
+            <div class="stat"><div class="k">Resets</div><div class="v" data-reset>—</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <span class="live"><i></i>Live</span>
+      <span class="spacer" style="flex:1"></span>
+      <span>Daily remaining · ⌘R refresh</span>
+    </div>
+  </div>
+
+<script>
+  // remaining % (so the orb fill reads "how much fuel you have")
+  const scenes = [
+    { oai:{ rem:66, wk:39, reset:'4h 10m', sub:'5h window · OAuth' },
+      ant:{ rem:28, wk:12, reset:'2h 40m', sub:'5h window · OAuth' } },
+    { oai:{ rem:12, wk:8,  reset:'38m',    sub:'5h window · running low' },
+      ant:{ rem:4,  wk:6,  reset:'1h 02m', sub:'5h window · nearly empty' } },
+    { oai:{ rem:88, wk:70, reset:'6h 50m', sub:'5h window · OAuth' },
+      ant:{ rem:92, wk:81, reset:'7h 12m', sub:'5h window · OAuth' } },
+  ];
+  let i=0;
+
+  // color ramp for remaining: high=green, low=red
+  const colorsFor = r => {
+    if(r>=60) return ['#4ade80','#059669'];     // green
+    if(r>=30) return ['#fbbf24','#b45309'];     // amber
+    if(r>=10) return ['#fb923c','#c2410c'];     // orange
+    return ['#f87171','#991b1b'];               // red
+  };
+  const klass = r => r>=60?'ok':r>=30?'warn':'crit';
+
+  function render(){
+    const d = scenes[i];
+    for(const p of ['oai','ant']){
+      const card = document.querySelector(`[data-prov="${p}"]`);
+      const rem = d[p].rem;
+      const orb = card.querySelector('[data-orb]');
+      orb.style.setProperty('--p', rem);
+      const [c1,c2] = colorsFor(rem);
+      orb.style.setProperty('--c1', c1);
+      orb.style.setProperty('--c2', c2);
+      orb.querySelector('[data-pct]').textContent = rem + '%';
+      card.querySelector('[data-sub]').textContent = d[p].sub;
+      const wk = card.querySelector('[data-wk]');
+      wk.textContent = d[p].wk + '% left';
+      wk.className = 'v ' + klass(d[p].wk);
+      card.querySelector('[data-reset]').textContent = d[p].reset;
+    }
+  }
+  document.getElementById('step').addEventListener('click', ()=>{
+    i = (i+1) % scenes.length; render();
+  });
+  render();
+</script>
+</body>
+</html>

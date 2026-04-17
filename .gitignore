@@ -7,3 +7,11 @@
 .codex/skills/.system/**
 !.codex/prompts/
 !.codex/prompts/**
+.build/
+.swiftpm/
+DerivedData/
+.DS_Store
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+QuotaBar.app/
