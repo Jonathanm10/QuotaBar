@@ -7,6 +7,7 @@ import QuotaBarCore
 final class AppState {
     var snapshots: [ProviderID: ProviderSnapshot] = [:]
     var isRefreshing = false
+    var isPopoverPresented = false
     var lastRefreshAt: Date?
     var lastError: String?
 

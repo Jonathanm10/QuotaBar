@@ -31,12 +31,16 @@ struct DashboardView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            LiveDot()
+            LiveDot(isActive: state.isPopoverPresented)
             Text("QuotaBar")
                 .font(.system(.body, design: .rounded).weight(.semibold))
                 .foregroundStyle(QBColor.ink)
             Spacer()
-            RefreshButton(isRefreshing: state.isRefreshing, action: onRefresh)
+            RefreshButton(
+                isRefreshing: state.isRefreshing,
+                isVisible: state.isPopoverPresented,
+                action: onRefresh
+            )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
@@ -61,7 +65,7 @@ struct DashboardView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            PulseDot()
+            PulseDot(isActive: state.isPopoverPresented)
             Text(state.lastRefreshAt.map { "Updated \(Formatting.ageSummary($0))" } ?? "Not yet refreshed")
                 .font(.system(size: 11))
                 .foregroundStyle(QBColor.ink3)
@@ -138,8 +142,13 @@ struct GaugePanel: View {
                     .font(.system(size: 9, weight: .semibold, design: .rounded))
                     .tracking(0.7)
                     .foregroundStyle(QBColor.ink2)
-                paceLine
-                metaLines
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    let pace = window.flatMap { UsagePace.compute(window: $0, now: context.date) }
+                    VStack(alignment: .leading, spacing: 3) {
+                        paceLine(pace: pace)
+                        metaLines(pace: pace, now: context.date)
+                    }
+                }
             }
             .lineLimit(1)
             Spacer(minLength: 0)
@@ -148,8 +157,8 @@ struct GaugePanel: View {
     }
 
     @ViewBuilder
-    private var paceLine: some View {
-        if let window, let pace = UsagePace.compute(window: window) {
+    private func paceLine(pace: UsagePace?) -> some View {
+        if let pace {
             Text(Formatting.paceLabel(pace))
                 .font(.system(size: 11.5, weight: .semibold, design: .rounded))
                 .foregroundStyle(PaceColor.forStage(pace.stage))
@@ -165,14 +174,14 @@ struct GaugePanel: View {
     }
 
     @ViewBuilder
-    private var metaLines: some View {
+    private func metaLines(pace: UsagePace?, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            if let runOut = runOutSummary {
+            if let runOut = runOutSummary(pace: pace) {
                 Text(runOut)
                     .font(.system(size: 10.5, design: .rounded).monospacedDigit())
                     .foregroundStyle(QBColor.ink3)
             }
-            if let reset = resetSummary {
+            if let reset = resetSummary(now: now) {
                 Text(reset)
                     .font(.system(size: 10.5, design: .rounded).monospacedDigit())
                     .foregroundStyle(QBColor.ink3)
@@ -180,15 +189,15 @@ struct GaugePanel: View {
         }
     }
 
-    private var resetSummary: String? {
+    private func resetSummary(now: Date) -> String? {
         guard let window, let reset = window.resetsAt else { return nil }
-        let remaining = reset.timeIntervalSinceNow
+        let remaining = reset.timeIntervalSince(now)
         guard remaining > 0 else { return "reset now" }
         return "reset " + Formatting.shortDuration(remaining)
     }
 
-    private var runOutSummary: String? {
-        guard let window, let pace = UsagePace.compute(window: window) else { return nil }
+    private func runOutSummary(pace: UsagePace?) -> String? {
+        guard let pace else { return nil }
         if pace.lastsToReset { return "lasts" }
         if let eta = pace.etaUntilExhaustion {
             return "out " + Formatting.shortDuration(eta)
@@ -247,38 +256,52 @@ struct GaugeRing: View {
 
 struct RefreshButton: View {
     let isRefreshing: Bool
+    let isVisible: Bool
     let action: () -> Void
-    @State private var rotation: Double = 0
-    @State private var spinning = false
+    @State private var clickBump: Double = 0
+
+    private var shouldSpin: Bool { isRefreshing && isVisible }
 
     var body: some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.55)) { rotation += 360 }
+            withAnimation(.easeInOut(duration: 0.55)) { clickBump += 360 }
             action()
         } label: {
+            Group {
+                if shouldSpin {
+                    SpinningRefreshIcon(bump: clickBump)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .imageScale(.small)
+                        .foregroundStyle(QBColor.ink2)
+                        .rotationEffect(.degrees(clickBump))
+                }
+            }
+            .frame(width: 24, height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(QBColor.line, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .keyboardShortcut("r", modifiers: [.command])
+        .help("Refresh now (⌘R)")
+    }
+}
+
+private struct SpinningRefreshIcon: View {
+    let bump: Double
+    @State private var start = Date()
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let elapsed = context.date.timeIntervalSince(start)
+            let degrees = elapsed / 0.9 * 360
             Image(systemName: "arrow.clockwise")
                 .imageScale(.small)
                 .foregroundStyle(QBColor.ink2)
-                .rotationEffect(.degrees(rotation))
-                .frame(width: 24, height: 24)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(QBColor.line, lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .keyboardShortcut("r", modifiers: [.command])
-        .help("Refresh now (⌘R)")
-        .onChange(of: isRefreshing) { _, now in
-            if now {
-                spinning = true
-                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
-                    rotation += 360
-                }
-            } else if spinning {
-                spinning = false
-                withAnimation(.easeOut(duration: 0.25)) { rotation = rotation.rounded() }
-            }
+                .rotationEffect(.degrees(degrees + bump))
         }
     }
 }
@@ -365,22 +388,34 @@ struct SourcePill: View {
 }
 
 struct LiveDot: View {
-    @State private var lit = true
+    let isActive: Bool
+    @State private var lit = false
 
     var body: some View {
         Circle()
             .fill(QBColor.ok)
             .frame(width: 8, height: 8)
             .shadow(color: QBColor.ok.opacity(lit ? 0.7 : 0.25), radius: lit ? 5 : 2)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                    lit.toggle()
-                }
+            .onAppear { self.updateAnimation(for: self.isActive) }
+            .onChange(of: isActive) { _, now in self.updateAnimation(for: now) }
+    }
+
+    private func updateAnimation(for active: Bool) {
+        if active {
+            lit = false
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                lit = true
             }
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) {
+                lit = false
+            }
+        }
     }
 }
 
 struct PulseDot: View {
+    let isActive: Bool
     @State private var on = false
 
     var body: some View {
@@ -388,11 +423,21 @@ struct PulseDot: View {
             .fill(QBColor.accent)
             .frame(width: 6, height: 6)
             .opacity(on ? 1 : 0.35)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                    on = true
-                }
+            .onAppear { self.updateAnimation(for: self.isActive) }
+            .onChange(of: isActive) { _, now in self.updateAnimation(for: now) }
+    }
+
+    private func updateAnimation(for active: Bool) {
+        if active {
+            on = false
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                on = true
             }
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) {
+                on = false
+            }
+        }
     }
 }
 

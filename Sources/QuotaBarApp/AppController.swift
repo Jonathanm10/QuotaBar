@@ -3,7 +3,7 @@ import SwiftUI
 import QuotaBarCore
 
 @MainActor
-final class AppController: NSObject, NSApplicationDelegate {
+final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private let state = AppState()
@@ -55,6 +55,7 @@ final class AppController: NSObject, NSApplicationDelegate {
     }
 
     private func configurePopover() {
+        self.popover.delegate = self
         self.popover.behavior = .transient
         self.popover.animates = true
         self.popover.contentSize = NSSize(width: 380, height: 380)
@@ -114,6 +115,15 @@ final class AppController: NSObject, NSApplicationDelegate {
             NSEvent.removeMonitor(monitor)
             self.popoverMonitor = nil
         }
+    }
+
+    func popoverDidShow(_ notification: Notification) {
+        self.state.isPopoverPresented = true
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        self.state.isPopoverPresented = false
+        self.removePopoverMonitor()
     }
 
     private func showContextMenu() {
