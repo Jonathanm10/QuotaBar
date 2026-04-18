@@ -1,26 +1,32 @@
 # QuotaBar
 
-QuotaBar is a native macOS menu bar app for keeping an eye on OpenAI and Anthropic usage without opening either web dashboard.
+**Know exactly how much OpenAI and Anthropic budget you have left — right from your menu bar.**
 
-It renders:
-- daily usage
-- weekly usage
-- reserve headroom
-- reset timing
-- pace hints based on the active window
+No more opening two dashboards, squinting at reset timers, or guessing whether you can afford to run that one more agent. QuotaBar lives in your menu bar, reads your existing local OAuth sessions, and keeps a quiet eye on both providers at once.
 
-The implementation stays intentionally small:
+<p align="center">
+  <img src="docs/screenshot.png" alt="QuotaBar menu bar popover showing OpenAI and Anthropic usage" width="420">
+</p>
+
+## What You Get
+
+- **Daily usage** so you can pace yourself before the day is half over
+- **Weekly usage** to see the real trend, not just today's spike
+- **Reserve headroom** from OpenAI credits and Anthropic extra-usage remaining
+- **Reset timing** so you know when the clock flips
+- **Pace hints** based on the active window — am I on track or torching tokens?
+
+All of it in a popover that opens in under a second and stays out of your way the rest of the day.
+
+## Why It Stays Fast
+
+The implementation is deliberately small:
+
 - AppKit-led menu bar shell
 - SwiftUI popover content
 - cache-first startup path
 - bounded background refresh every 5 minutes
 - existing local OAuth session reuse instead of a custom auth flow
-
-## Status
-
-QuotaBar is early-stage but usable. The codebase is small, the tests are fast, and the project is open to focused contributions that keep the app lean.
-
-This project is not affiliated with, endorsed by, or maintained by OpenAI or Anthropic. Provider names and logos remain the property of their respective owners.
 
 ## Install
 
@@ -28,37 +34,11 @@ Download the latest signed and notarized DMG from the [Releases page](https://gi
 
 Releases are cut from `v*` git tags — pushing `vX.Y.Z` triggers the release workflow, which signs with Developer ID, notarizes via App Store Connect API key, staples, and uploads the DMG.
 
-### Cutting a release
+## Status
 
-One-time setup:
+QuotaBar is early-stage but usable. The codebase is small, the tests are fast, and the project is open to focused contributions that keep the app lean.
 
-1. Export your Developer ID Application certificate from Keychain Access as a `.p12` with a password.
-2. Mint an App Store Connect API key at https://appstoreconnect.apple.com/access/integrations/api with the `Developer` role (enough for notarization). Download the `AuthKey_XXXXXXXXXX.p8` — it can only be downloaded once.
-3. Configure the same key locally so [`asc`](https://github.com/rorkai/App-Store-Connect-CLI) can validate it against your account before you ever push a tag:
-   ```bash
-   asc auth login \
-     --name quotabar-release \
-     --key-id YOUR_KEY_ID \
-     --issuer-id YOUR_ISSUER_ID \
-     --private-key ~/Downloads/AuthKey_YOUR_KEY_ID.p8 \
-     --network
-   asc auth doctor
-   ```
-4. Populate the 5 repo secrets:
-   ```bash
-   base64 -i DeveloperID.p12        | gh secret set DEVELOPER_ID_APPLICATION_CERT_P12_BASE64
-   gh secret set DEVELOPER_ID_APPLICATION_CERT_P12_PASSWORD
-   gh secret set APPLE_TEAM_ID
-   base64 -i AuthKey_YOUR_KEY_ID.p8 | gh secret set ASC_API_KEY_P8_BASE64
-   gh secret set ASC_API_KEY_ID
-   gh secret set ASC_API_ISSUER_ID
-   ```
-
-Then cut a release by pushing a tag:
-
-```bash
-git tag v0.1.0 && git push origin v0.1.0
-```
+This project is not affiliated with, endorsed by, or maintained by OpenAI or Anthropic. Provider names and logos remain the property of their respective owners.
 
 ## Platform And Tooling
 
