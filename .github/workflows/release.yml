@@ -94,6 +94,12 @@ jobs:
             --options runtime \
             --timestamp \
             --sign "$APPLE_TEAM_ID" \
+            "$APP_NAME.app/Contents/MacOS/$APP_NAME"
+          codesign \
+            --force \
+            --options runtime \
+            --timestamp \
+            --sign "$APPLE_TEAM_ID" \
             "$APP_NAME.app"
           codesign --verify --deep --strict --verbose=2 "$APP_NAME.app"
 
