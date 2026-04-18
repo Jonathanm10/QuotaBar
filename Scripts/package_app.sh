@@ -8,6 +8,8 @@ APP_NAME="QuotaBar"
 APP_DIR="$ROOT_DIR/${APP_NAME}.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
+VERSION="${VERSION:-0.0.0-dev}"
+BUILD_NUMBER="${BUILD_NUMBER:-1}"
 
 swift build -c release
 
@@ -16,7 +18,7 @@ mkdir -p "$MACOS_DIR"
 
 cp "$ROOT_DIR/.build/release/QuotaBar" "$MACOS_DIR/QuotaBar"
 
-cat > "$CONTENTS_DIR/Info.plist" <<'EOF'
+cat > "$CONTENTS_DIR/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -32,9 +34,9 @@ cat > "$CONTENTS_DIR/Info.plist" <<'EOF'
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>${VERSION}</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>${BUILD_NUMBER}</string>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
   <key>LSUIElement</key>
@@ -43,4 +45,4 @@ cat > "$CONTENTS_DIR/Info.plist" <<'EOF'
 </plist>
 EOF
 
-echo "Packaged $APP_DIR"
+echo "Packaged $APP_DIR (version $VERSION, build $BUILD_NUMBER)"
