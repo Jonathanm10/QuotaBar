@@ -84,24 +84,34 @@ jobs:
           BUILD_NUMBER: ${{ github.run_number }}
         run: ./Scripts/package_app.sh
 
+      - name: Resolve signing identity
+        run: |
+          set -euo pipefail
+          IDENTITY_SHA=$(security find-identity -v -p codesigning | awk '/Developer ID Application/{print $2; exit}')
+          if [ -z "$IDENTITY_SHA" ]; then
+            echo "No Developer ID Application identity found in keychain" >&2
+            security find-identity -v -p codesigning >&2
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$IDENTITY_SHA" >> "$GITHUB_ENV"
+
       - name: Sign app bundle
-        env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           codesign \
             --force \
             --options runtime \
             --timestamp \
-            --sign "$APPLE_TEAM_ID" \
+            --sign "$SIGN_IDENTITY" \
             "$APP_NAME.app/Contents/MacOS/$APP_NAME"
           codesign \
             --force \
             --options runtime \
             --timestamp \
-            --sign "$APPLE_TEAM_ID" \
+            --sign "$SIGN_IDENTITY" \
             "$APP_NAME.app"
           codesign --verify --deep --strict --verbose=2 "$APP_NAME.app"
+          codesign -dvvv "$APP_NAME.app" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier"
 
       - name: Create DMG
         env:
@@ -123,10 +133,8 @@ jobs:
           echo "DMG=$DMG" >> "$GITHUB_ENV"
 
       - name: Sign DMG
-        env:
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          codesign --force --timestamp --sign "$APPLE_TEAM_ID" "$DMG"
+          codesign --force --timestamp --sign "$SIGN_IDENTITY" "$DMG"
           codesign --verify --verbose=2 "$DMG"
 
       - name: Notarize DMG
