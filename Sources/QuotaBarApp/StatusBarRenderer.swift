@@ -1,6 +1,7 @@
 import AppKit
 import QuotaBarCore
 
+@MainActor
 enum StatusBarRenderer {
     static func render(snapshots: [ProviderSnapshot]) -> NSImage {
         let height: CGFloat = 18

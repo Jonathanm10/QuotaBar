@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import QuotaBarCore
 
+@MainActor
 enum BrandLogos {
     static let openAI: NSImage = load("openai")
     static let anthropic: NSImage = load("anthropic")
