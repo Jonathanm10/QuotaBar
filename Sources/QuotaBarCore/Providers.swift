@@ -40,7 +40,7 @@ public actor RefreshCoordinator {
                             return snapshot
                         } catch {
                             await self.refreshPolicy.recordFailure(provider: provider.providerID, now: now)
-                            AppLog.provider.error("Provider \(provider.providerID.displayName, privacy: .public) refresh failed")
+                            AppLog.provider.error("Provider \(provider.providerID.displayName, privacy: .public) refresh failed: \(error.localizedDescription, privacy: .public)")
                             return nil
                         }
                     }

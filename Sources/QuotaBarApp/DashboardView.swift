@@ -144,9 +144,10 @@ struct GaugePanel: View {
                     .foregroundStyle(QBColor.ink2)
                 TimelineView(.periodic(from: .now, by: 60)) { context in
                     let pace = window.flatMap { UsagePace.compute(window: $0, now: context.date) }
+                    let stale = isStale(now: context.date)
                     VStack(alignment: .leading, spacing: 3) {
-                        paceLine(pace: pace)
-                        metaLines(pace: pace, now: context.date)
+                        paceLine(pace: pace, stale: stale)
+                        metaLines(pace: pace, now: context.date, stale: stale)
                     }
                 }
             }
@@ -157,15 +158,15 @@ struct GaugePanel: View {
     }
 
     @ViewBuilder
-    private func paceLine(pace: UsagePace?) -> some View {
-        if let pace {
+    private func paceLine(pace: UsagePace?, stale: Bool) -> some View {
+        if stale {
+            Text("Stale")
+                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(QBColor.warn)
+        } else if let pace {
             Text(Formatting.paceLabel(pace))
                 .font(.system(size: 11.5, weight: .semibold, design: .rounded))
                 .foregroundStyle(PaceColor.forStage(pace.stage))
-        } else if window != nil {
-            Text("On pace")
-                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                .foregroundStyle(QBColor.ink2)
         } else {
             Text("—")
                 .font(.system(size: 11.5, design: .rounded))
@@ -174,26 +175,30 @@ struct GaugePanel: View {
     }
 
     @ViewBuilder
-    private func metaLines(pace: UsagePace?, now: Date) -> some View {
+    private func metaLines(pace: UsagePace?, now: Date, stale: Bool) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             if let runOut = runOutSummary(pace: pace) {
                 Text(runOut)
                     .font(.system(size: 10.5, design: .rounded).monospacedDigit())
                     .foregroundStyle(QBColor.ink3)
             }
-            if let reset = resetSummary(now: now) {
+            if let reset = resetSummary(now: now, stale: stale) {
                 Text(reset)
                     .font(.system(size: 10.5, design: .rounded).monospacedDigit())
-                    .foregroundStyle(QBColor.ink3)
+                    .foregroundStyle(stale ? QBColor.warn : QBColor.ink3)
             }
         }
     }
 
-    private func resetSummary(now: Date) -> String? {
+    private func isStale(now: Date) -> Bool {
+        guard let window, let reset = window.resetsAt else { return false }
+        return reset <= now
+    }
+
+    private func resetSummary(now: Date, stale: Bool) -> String? {
         guard let window, let reset = window.resetsAt else { return nil }
-        let remaining = reset.timeIntervalSince(now)
-        guard remaining > 0 else { return "reset now" }
-        return "reset " + Formatting.shortDuration(remaining)
+        if stale { return "reset " + Formatting.shortDuration(now.timeIntervalSince(reset)) + " ago" }
+        return "reset " + Formatting.shortDuration(reset.timeIntervalSince(now))
     }
 
     private func runOutSummary(pace: UsagePace?) -> String? {
