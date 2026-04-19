@@ -70,7 +70,7 @@ struct DashboardView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(QBColor.ink3)
             Spacer()
-            Legend()
+            PaceMarkerLegend()
             Button("", action: onQuit)
                 .buttonStyle(.plain)
                 .keyboardShortcut("q", modifiers: [.command])
@@ -83,181 +83,220 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Provider Card
+// MARK: - Provider card (bar layout)
 
 struct ProviderCardView: View {
     let snapshot: ProviderSnapshot
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                ProviderLogoChip(provider: snapshot.provider)
-                Text(snapshot.provider.displayName)
-                    .font(.system(.body, design: .rounded).weight(.semibold))
-                    .foregroundStyle(QBColor.ink)
-                Spacer()
-                SourcePill(text: snapshot.source)
-            }
-
-            HStack(alignment: .center, spacing: 10) {
-                GaugePanel(title: "Daily", window: snapshot.daily)
-                Rectangle()
-                    .fill(QBColor.line)
-                    .frame(width: 1, height: 64)
-                GaugePanel(title: "Weekly", window: snapshot.weekly)
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                VStack(spacing: 8) {
+                    BarRow(title: "Daily", window: snapshot.daily, now: context.date)
+                    BarRow(title: "Weekly", window: snapshot.weekly, now: context.date)
+                }
             }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(
-            ZStack {
-                LinearGradient(
-                    colors: [QBColor.panelTop, QBColor.panelBottom],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                GridBackground()
-            }
+            LinearGradient(
+                colors: [QBColor.panelTop, QBColor.panelBottom],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         )
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(QBColor.line, lineWidth: 1)
         )
     }
-}
 
-struct GaugePanel: View {
-    let title: String
-    let window: UsageWindow?
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 9) {
-            GaugeRing(
-                percent: window?.usedPercent ?? 0,
-                color: UsageColor.forUsedPercent(window?.usedPercent ?? 0),
-                hasData: window != nil
-            )
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title.uppercased())
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .tracking(0.7)
-                    .foregroundStyle(QBColor.ink2)
+    private var header: some View {
+        HStack(spacing: 10) {
+            ProviderLogoChip(provider: snapshot.provider)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(snapshot.provider.displayName)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(QBColor.ink)
                 TimelineView(.periodic(from: .now, by: 60)) { context in
-                    let pace = window.flatMap { UsagePace.compute(window: $0, now: context.date) }
-                    let stale = isStale(now: context.date)
-                    VStack(alignment: .leading, spacing: 3) {
-                        paceLine(pace: pace, stale: stale)
-                        metaLines(pace: pace, now: context.date, stale: stale)
-                    }
+                    Text(subtitle(now: context.date))
+                        .font(.system(size: 11, design: .rounded))
+                        .foregroundStyle(QBColor.ink3)
+                        .lineLimit(1)
                 }
             }
-            .lineLimit(1)
-            Spacer(minLength: 0)
+            Spacer(minLength: 6)
+            TimelineView(.periodic(from: .now, by: 60)) { _ in
+                worstBadge
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var worst: Double {
+        max(snapshot.daily?.usedPercent ?? 0, snapshot.weekly?.usedPercent ?? 0)
+    }
+
+    private var worstBadge: some View {
+        Text("\(Int(worst.rounded()))%")
+            .font(.system(size: 14, weight: .bold, design: .rounded).monospacedDigit())
+            .foregroundStyle(UsageColor.forUsedPercent(worst))
+    }
+
+    private func subtitle(now: Date) -> String {
+        let sourceTag = snapshot.source.uppercased()
+        let paces = [snapshot.daily, snapshot.weekly]
+            .compactMap { $0 }
+            .compactMap { UsagePace.compute(window: $0, now: now) }
+        guard let worst = paces.max(by: { $0.deltaPercent < $1.deltaPercent }) else {
+            return sourceTag
+        }
+        let phrase: String = switch worst.stage {
+        case .onTrack: "on pace"
+        case .slightReserve, .moderateReserve, .deepReserve: "banking reserve"
+        case .slightDeficit, .moderateDeficit, .severeDeficit: "burning fast"
+        }
+        return "\(sourceTag) · \(phrase)"
+    }
+}
+
+// MARK: - Bar row
+
+struct BarRow: View {
+    let title: String
+    let window: UsageWindow?
+    let now: Date
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .tracking(0.5)
+                .foregroundStyle(QBColor.ink3)
+                .frame(width: 48, alignment: .leading)
+            BarTrack(window: window, now: now)
+                .frame(maxWidth: .infinity)
+            PaceMeta(window: window, now: now)
+                .frame(width: 92, alignment: .trailing)
+        }
+    }
+}
+
+struct BarTrack: View {
+    let window: UsageWindow?
+    let now: Date
+
+    private var pct: Double { clamp01(window?.usedPercent ?? 0, hi: 100) }
+    private var expected: Double? {
+        guard let window, let pace = UsagePace.compute(window: window, now: now) else { return nil }
+        return pace.expectedPercent
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let fillWidth = max(0, w * pct / 100)
+            let tickX: CGFloat? = expected.map { max(0, w * $0 / 100) - 1 }
+            let fillColor = window == nil ? QBColor.ink3.opacity(0.35) : UsageColor.forUsedPercent(pct)
+
+            ZStack(alignment: .leading) {
+                // 7px track, vertically centered inside the 13px row
+                ZStack(alignment: .leading) {
+                    Capsule(style: .continuous)
+                        .fill(QBColor.trackBg)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .strokeBorder(QBColor.line, lineWidth: 1)
+                        )
+                    Capsule(style: .continuous)
+                        .fill(fillColor)
+                        .frame(width: fillWidth)
+                        .animation(.easeInOut(duration: 0.55), value: pct)
+                }
+                .frame(height: 7)
+                .clipShape(Capsule(style: .continuous))
+
+                // pace tick — 2×13 extending above/below the track
+                if let tickX {
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.55))
+                        .frame(width: 2, height: 13)
+                        .shadow(color: Color.white.opacity(0.2), radius: 1.5)
+                        .offset(x: tickX)
+                        .animation(.easeInOut(duration: 0.55), value: tickX)
+                }
+            }
+            .frame(height: 13)
+        }
+        .frame(height: 13)
+    }
+}
+
+struct PaceMeta: View {
+    let window: UsageWindow?
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            deltaLine
+            etaLine
+        }
+    }
+
+    private var pace: UsagePace? {
+        guard let window else { return nil }
+        return UsagePace.compute(window: window, now: now)
+    }
+
+    private var isStale: Bool {
+        guard let window, let reset = window.resetsAt else { return false }
+        return reset <= now
     }
 
     @ViewBuilder
-    private func paceLine(pace: UsagePace?, stale: Bool) -> some View {
-        if stale {
+    private var deltaLine: some View {
+        if isStale {
             Text("Stale")
-                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                 .foregroundStyle(QBColor.warn)
         } else if let pace {
             Text(Formatting.paceLabel(pace))
-                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                .font(.system(size: 10.5, weight: .semibold, design: .rounded).monospacedDigit())
                 .foregroundStyle(PaceColor.forStage(pace.stage))
         } else {
             Text("—")
-                .font(.system(size: 11.5, design: .rounded))
+                .font(.system(size: 10.5, design: .rounded))
                 .foregroundStyle(QBColor.ink3)
         }
     }
 
     @ViewBuilder
-    private func metaLines(pace: UsagePace?, now: Date, stale: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            if let runOut = runOutSummary(pace: pace) {
-                Text(runOut)
-                    .font(.system(size: 10.5, design: .rounded).monospacedDigit())
-                    .foregroundStyle(QBColor.ink3)
-            }
-            if let reset = resetSummary(now: now, stale: stale) {
-                Text(reset)
-                    .font(.system(size: 10.5, design: .rounded).monospacedDigit())
-                    .foregroundStyle(stale ? QBColor.warn : QBColor.ink3)
-            }
+    private var etaLine: some View {
+        if let text = etaText {
+            Text(text)
+                .font(.system(size: 10, design: .rounded).monospacedDigit())
+                .foregroundStyle(QBColor.ink3)
+                .lineLimit(1)
         }
     }
 
-    private func isStale(now: Date) -> Bool {
-        guard let window, let reset = window.resetsAt else { return false }
-        return reset <= now
-    }
-
-    private func resetSummary(now: Date, stale: Bool) -> String? {
-        guard let window, let reset = window.resetsAt else { return nil }
-        if stale { return "reset " + Formatting.shortDuration(now.timeIntervalSince(reset)) + " ago" }
-        return "reset " + Formatting.shortDuration(reset.timeIntervalSince(now))
-    }
-
-    private func runOutSummary(pace: UsagePace?) -> String? {
-        guard let pace else { return nil }
-        if pace.lastsToReset { return "lasts" }
-        if let eta = pace.etaUntilExhaustion {
-            return "out " + Formatting.shortDuration(eta)
+    private var etaText: String? {
+        if isStale, let reset = window?.resetsAt {
+            return "reset \(Formatting.shortDuration(now.timeIntervalSince(reset))) ago"
+        }
+        if let pace, let eta = pace.etaUntilExhaustion {
+            return "out \(Formatting.shortDuration(eta))"
+        }
+        if let reset = window?.resetsAt {
+            return "until \(Formatting.shortDuration(reset.timeIntervalSince(now)))"
         }
         return nil
     }
 }
 
-// MARK: - Gauge ring
-
-struct GaugeRing: View {
-    let percent: Double
-    let color: Color
-    let hasData: Bool
-    var size: CGFloat = 54
-
-    var body: some View {
-        ZStack {
-            Circle().fill(QBColor.ringTrack)
-            PieArc(fraction: clamped / 100)
-                .fill(color)
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 19 / 255, green: 22 / 255, blue: 27 / 255),
-                            Color(red: 15 / 255, green: 17 / 255, blue: 22 / 255),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .overlay(
-                    Circle().strokeBorder(Color.white.opacity(0.04), lineWidth: 1)
-                )
-                .padding(4)
-            Group {
-                if hasData {
-                    Text("\(Int(clamped.rounded()))%")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(QBColor.ink)
-                } else {
-                    Text("—")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(QBColor.ink3)
-                }
-            }
-        }
-        .frame(width: size, height: size)
-        .opacity(hasData ? 1 : 0.45)
-        .animation(.easeInOut(duration: 0.55), value: clamped)
-    }
-
-    private var clamped: Double { min(max(percent, 0), 100) }
-}
+// MARK: - Refresh button
 
 struct RefreshButton: View {
     let isRefreshing: Bool
@@ -311,33 +350,6 @@ private struct SpinningRefreshIcon: View {
     }
 }
 
-struct PieArc: Shape {
-    var fraction: Double
-
-    var animatableData: Double {
-        get { fraction }
-        set { fraction = newValue }
-    }
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let f = min(max(fraction, 0), 1)
-        guard f > 0 else { return path }
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let radius = min(rect.width, rect.height) / 2
-        path.move(to: center)
-        path.addArc(
-            center: center,
-            radius: radius,
-            startAngle: .degrees(-90),
-            endAngle: .degrees(-90 + 360 * f),
-            clockwise: false
-        )
-        path.closeSubpath()
-        return path
-    }
-}
-
 // MARK: - Chips, pills, dots
 
 struct ProviderLogoChip: View {
@@ -345,20 +357,12 @@ struct ProviderLogoChip: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(chipColor)
-            Text(letter)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(letterColor)
+            BrandLogoView(provider: provider, size: 15)
+                .foregroundStyle(Color.white)
         }
-        .frame(width: 22, height: 22)
-    }
-
-    private var letter: String {
-        switch provider {
-        case .openAI: "O"
-        case .anthropic: "A"
-        }
+        .frame(width: 24, height: 24)
     }
 
     private var chipColor: Color {
@@ -366,29 +370,6 @@ struct ProviderLogoChip: View {
         case .openAI: QBColor.oaiChip
         case .anthropic: QBColor.antChip
         }
-    }
-
-    private var letterColor: Color {
-        switch provider {
-        case .openAI: Color(red: 0, green: 0, blue: 17 / 255)
-        case .anthropic: Color(red: 42 / 255, green: 19 / 255, blue: 5 / 255)
-        }
-    }
-}
-
-struct SourcePill: View {
-    let text: String
-
-    var body: some View {
-        Text(text.uppercased())
-            .font(.system(size: 9, weight: .semibold, design: .rounded))
-            .tracking(0.6)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .foregroundStyle(QBColor.ink3)
-            .background(
-                Capsule().strokeBorder(QBColor.line, lineWidth: 0.5)
-            )
     }
 }
 
@@ -446,21 +427,13 @@ struct PulseDot: View {
     }
 }
 
-struct Legend: View {
+struct PaceMarkerLegend: View {
     var body: some View {
-        HStack(spacing: 10) {
-            legendItem(color: QBColor.ok, label: "ok")
-            legendItem(color: QBColor.warn, label: "warn")
-            legendItem(color: QBColor.crit, label: "crit")
-        }
-    }
-
-    private func legendItem(color: Color, label: String) -> some View {
-        HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(color)
-                .frame(width: 8, height: 8)
-            Text(label)
+        HStack(spacing: 6) {
+            Capsule(style: .continuous)
+                .fill(Color.white.opacity(0.55))
+                .frame(width: 2, height: 10)
+            Text("on-pace marker")
                 .font(.system(size: 10, weight: .medium, design: .rounded))
                 .foregroundStyle(QBColor.ink3)
         }
@@ -498,32 +471,6 @@ struct EmptyStateView: View {
     }
 }
 
-// MARK: - Grid background
-
-struct GridBackground: View {
-    var body: some View {
-        Canvas { ctx, size in
-            let step: CGFloat = 22
-            var path = Path()
-            var x: CGFloat = 0
-            while x <= size.width {
-                path.move(to: CGPoint(x: x, y: 0))
-                path.addLine(to: CGPoint(x: x, y: size.height))
-                x += step
-            }
-            var y: CGFloat = 0
-            while y <= size.height {
-                path.move(to: CGPoint(x: 0, y: y))
-                path.addLine(to: CGPoint(x: size.width, y: y))
-                y += step
-            }
-            ctx.stroke(path, with: .color(Color.white.opacity(0.03)), lineWidth: 1)
-        }
-        .allowsHitTesting(false)
-        .opacity(0.55)
-    }
-}
-
 // MARK: - Palette
 
 private enum QBColor {
@@ -532,6 +479,7 @@ private enum QBColor {
     static let panelTop = Color(red: 22 / 255, green: 24 / 255, blue: 29 / 255)
     static let panelBottom = Color(red: 27 / 255, green: 30 / 255, blue: 36 / 255)
     static let line = Color(red: 36 / 255, green: 39 / 255, blue: 47 / 255)
+    static let trackBg = Color(red: 12 / 255, green: 14 / 255, blue: 21 / 255)
     static let ink = Color(red: 238 / 255, green: 240 / 255, blue: 243 / 255)
     static let ink2 = Color(red: 155 / 255, green: 162 / 255, blue: 173 / 255)
     static let ink3 = Color(red: 107 / 255, green: 114 / 255, blue: 128 / 255)
@@ -542,7 +490,6 @@ private enum QBColor {
     static let oaiChip = Color(red: 16 / 255, green: 163 / 255, blue: 127 / 255)
     static let antChip = Color(red: 217 / 255, green: 119 / 255, blue: 87 / 255)
     static let accent = Color(red: 96 / 255, green: 165 / 255, blue: 250 / 255)
-    static let ringTrack = Color.white.opacity(0.07)
 }
 
 enum UsageColor {
@@ -566,4 +513,8 @@ enum PaceColor {
         case .moderateDeficit, .severeDeficit: QBColor.crit
         }
     }
+}
+
+private func clamp01(_ value: Double, hi: Double = 1) -> Double {
+    min(max(value, 0), hi)
 }
