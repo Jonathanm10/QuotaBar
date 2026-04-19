@@ -504,21 +504,15 @@ private enum QBColor {
 
 enum UsageColor {
     static func forUsedPercent(_ used: Double) -> Color {
-        switch used {
-        case ..<50: QBColor.ok
-        case ..<75: QBColor.warn
-        case ..<90: QBColor.hot
-        default: QBColor.crit
-        }
+        used >= 80 ? QBColor.crit : QBColor.ink2
     }
 }
 
 enum PaceColor {
     static func forStage(_ stage: PaceStage) -> Color {
         switch stage {
-        case .onTrack, .slightReserve, .moderateReserve, .deepReserve: QBColor.ink2
-        case .slightDeficit: QBColor.warn
         case .moderateDeficit, .severeDeficit: QBColor.crit
+        default: QBColor.ink2
         }
     }
 }
