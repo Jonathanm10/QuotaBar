@@ -1,6 +1,7 @@
 #!/usr/bin/env swift
 
 import AppKit
+import CoreText
 import Foundation
 
 enum RenderError: Error {
@@ -9,6 +10,46 @@ enum RenderError: Error {
     case pngEncodingFailed
     case iconutilFailed
 }
+
+// MARK: - Palette
+//
+// Colors live as CGColor (sRGB). NSColor(srgbRed:).cgColor silently collapses
+// dark colors toward grayscale in this pipeline, so we avoid NSColor for
+// fills/strokes/gradients. `ns(...)` wraps to NSColor only where AppKit APIs
+// require it (NSShadow, NSAttributedString attributes).
+
+func cg(_ r: Int, _ g: Int, _ b: Int, alpha: CGFloat = 1) -> CGColor {
+    CGColor(srgbRed: CGFloat(r) / 255.0, green: CGFloat(g) / 255.0, blue: CGFloat(b) / 255.0, alpha: alpha)
+}
+
+func cg(_ color: CGColor, alpha: CGFloat) -> CGColor {
+    color.copy(alpha: alpha) ?? color
+}
+
+func ns(_ color: CGColor) -> NSColor {
+    guard let comps = color.components, comps.count >= 3 else { return .black }
+    let a: CGFloat = comps.count >= 4 ? comps[3] : 1
+    return NSColor(srgbRed: comps[0], green: comps[1], blue: comps[2], alpha: a)
+}
+
+let neonCyan   = cg(  0, 230, 255)
+let neonPurple = cg(192, 132, 255)
+let neonPink   = cg(255,  79, 163)
+let neonViolet = cg(123,  80, 255)
+let neonBg     = cg( 10,   7,  22)
+let neonInk    = cg(234, 243, 255)
+let inkSoft    = cg(168, 158, 196)
+let inkMuted   = cg(138, 130, 164)
+
+let whiteA04 = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.04)
+let whiteA05 = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.05)
+let whiteA10 = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.10)
+let whiteA14 = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.14)
+let whiteA18 = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.18)
+
+let sRGBColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+
+// MARK: - Main
 
 let arguments = CommandLine.arguments
 guard arguments.count == 2 else {
@@ -58,6 +99,8 @@ guard iconutil.terminationStatus == 0 else {
 let background = try renderPNG(width: 720, height: 440, draw: drawDMGBackground)
 try background.write(to: outputDirectory.appendingPathComponent("dmg-background.png"))
 
+// MARK: - Rendering plumbing
+
 func renderPNG(width: Int, height: Int, draw: (CGContext, CGSize) -> Void) throws -> Data {
     guard
         let rep = NSBitmapImageRep(
@@ -80,8 +123,7 @@ func renderPNG(width: Int, height: Int, draw: (CGContext, CGSize) -> Void) throw
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = context
     let cgContext = context.cgContext
-    cgContext.setFillColor(NSColor.clear.cgColor)
-    cgContext.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    cgContext.clear(CGRect(x: 0, y: 0, width: width, height: height))
     draw(cgContext, CGSize(width: width, height: height))
     NSGraphicsContext.restoreGraphicsState()
 
@@ -91,213 +133,423 @@ func renderPNG(width: Int, height: Int, draw: (CGContext, CGSize) -> Void) throw
     return data
 }
 
+// MARK: - Icon
+
 func drawIcon(_ context: CGContext, _ size: CGSize) {
-    let rect = CGRect(origin: .zero, size: size)
-    let radius = size.width * 0.22
+    let scale = size.width / 128
+    let bodyRect = CGRect(x: 6 * scale, y: 6 * scale, width: 116 * scale, height: 116 * scale)
+    let cornerRadius = 28 * scale
 
+    // Drop shadow beneath the tile
     context.saveGState()
-    let shadow = NSShadow()
-    shadow.shadowBlurRadius = size.width * 0.06
-    shadow.shadowOffset = CGSize(width: 0, height: -size.height * 0.02)
-    shadow.shadowColor = NSColor(calibratedWhite: 0, alpha: 0.34)
-    shadow.set()
-    NSColor(calibratedWhite: 0, alpha: 0.42).setFill()
-    roundedRect(rect.insetBy(dx: size.width * 0.04, dy: size.height * 0.04), radius: radius).fill()
+    context.setShadow(
+        offset: CGSize(width: 0, height: -size.height * 0.02),
+        blur: size.width * 0.06,
+        color: CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.45)
+    )
+    context.setFillColor(CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.35))
+    addRoundedRect(context: context, rect: bodyRect, radius: cornerRadius)
+    context.fillPath()
     context.restoreGState()
 
-    let cardRect = rect.insetBy(dx: size.width * 0.06, dy: size.height * 0.06)
-    let card = roundedRect(cardRect, radius: radius)
-    card.addClip()
-
-    NSGradient(colors: [
-        NSColor(red: 18 / 255, green: 28 / 255, blue: 41 / 255, alpha: 1),
-        NSColor(red: 10 / 255, green: 15 / 255, blue: 24 / 255, alpha: 1),
-    ])?.draw(in: cardRect, angle: 255)
-
-    let haloRect = CGRect(
-        x: cardRect.minX - size.width * 0.18,
-        y: cardRect.midY - size.height * 0.08,
-        width: size.width * 0.8,
-        height: size.height * 0.65
-    )
-    NSColor(red: 71 / 255, green: 214 / 255, blue: 170 / 255, alpha: 0.16).setFill()
-    NSBezierPath(ovalIn: haloRect).fill()
-
-    let glowRect = CGRect(
-        x: cardRect.midX - size.width * 0.12,
-        y: cardRect.minY + size.height * 0.08,
-        width: size.width * 0.62,
-        height: size.height * 0.62
-    )
-    NSColor(red: 255 / 255, green: 159 / 255, blue: 67 / 255, alpha: 0.12).setFill()
-    NSBezierPath(ovalIn: glowRect).fill()
-
-    let ringLineWidth = size.width * 0.085
-    let ringRect = CGRect(
-        x: size.width * 0.2,
-        y: size.height * 0.21,
-        width: size.width * 0.6,
-        height: size.height * 0.6
-    )
-
-    strokeArc(in: ringRect, startAngle: 135, endAngle: 244, lineWidth: ringLineWidth, color: NSColor(red: 77 / 255, green: 234 / 255, blue: 190 / 255, alpha: 1))
-    strokeArc(in: ringRect, startAngle: 252, endAngle: 309, lineWidth: ringLineWidth, color: NSColor(red: 239 / 255, green: 246 / 255, blue: 255 / 255, alpha: 0.96))
-    strokeArc(in: ringRect, startAngle: 318, endAngle: 395, lineWidth: ringLineWidth, color: NSColor(red: 255 / 255, green: 166 / 255, blue: 84 / 255, alpha: 1))
-
-    let tailRect = CGRect(
-        x: size.width * 0.62,
-        y: size.height * 0.24,
-        width: size.width * 0.14,
-        height: size.height * 0.18
-    )
+    // Body gradient + glows, clipped to the tile
     context.saveGState()
-    context.translateBy(x: tailRect.midX, y: tailRect.midY)
-    context.rotate(by: -.pi / 4.4)
-    let tail = roundedRect(
-        CGRect(x: -tailRect.width / 2, y: -tailRect.height / 2, width: tailRect.width, height: tailRect.height),
-        radius: tailRect.width * 0.32
+    addRoundedRect(context: context, rect: bodyRect, radius: cornerRadius)
+    context.clip()
+
+    drawLinearGradient(
+        context: context,
+        rect: bodyRect,
+        colors: [cg(26, 16, 48), cg(7, 4, 20)],
+        start: CGPoint(x: bodyRect.midX, y: bodyRect.maxY),
+        end:   CGPoint(x: bodyRect.midX, y: bodyRect.minY)
     )
-    NSColor(red: 239 / 255, green: 246 / 255, blue: 255 / 255, alpha: 0.94).setFill()
-    tail.fill()
+
+    drawRadialGlow(
+        context: context,
+        center: CGPoint(x: bodyRect.minX + bodyRect.width * 0.28, y: bodyRect.minY + bodyRect.height * 0.74),
+        radius: bodyRect.width * 0.80,
+        color: cg(neonViolet, alpha: 0.50)
+    )
+    drawRadialGlow(
+        context: context,
+        center: CGPoint(x: bodyRect.maxX - bodyRect.width * 0.20, y: bodyRect.minY + bodyRect.height * 0.28),
+        radius: bodyRect.width * 0.55,
+        color: cg(neonPink, alpha: 0.35)
+    )
+
+    // Inner ring
+    let innerCircleRect = CGRect(x: 24 * scale, y: 24 * scale, width: 80 * scale, height: 80 * scale)
+    context.setFillColor(whiteA04)
+    context.fillEllipse(in: innerCircleRect)
+    context.setStrokeColor(whiteA14)
+    context.setLineWidth(max(0.5, 1 * scale))
+    context.strokeEllipse(in: innerCircleRect)
+
+    // Signal wave with gradient stroke (cyan → purple → pink).
+    // SVG path M24 68 Q40 44 64 64 T104 60, y-flipped into CoreGraphics bottom-up coords.
+    let wavePath = CGMutablePath()
+    wavePath.move(to: CGPoint(x: 24 * scale, y: 60 * scale))
+    wavePath.addQuadCurve(
+        to: CGPoint(x: 64 * scale, y: 64 * scale),
+        control: CGPoint(x: 40 * scale, y: 84 * scale)
+    )
+    wavePath.addQuadCurve(
+        to: CGPoint(x: 104 * scale, y: 68 * scale),
+        control: CGPoint(x: 88 * scale, y: 44 * scale)
+    )
+
+    let waveWidth = max(1, 5 * scale)
+    strokeGradient(
+        context: context,
+        path: wavePath,
+        lineWidth: waveWidth,
+        start: CGPoint(x: 24 * scale, y: 64 * scale),
+        end:   CGPoint(x: 104 * scale, y: 64 * scale),
+        colors: [neonCyan, neonPurple, neonPink]
+    )
+
+    // Endpoint dots (only draw when big enough to register)
+    if scale >= 0.75 {
+        context.setFillColor(neonPink)
+        context.fillEllipse(in: dotRect(center: CGPoint(x: 104 * scale, y: 68 * scale), radius: 4.5 * scale))
+        context.setFillColor(neonCyan)
+        context.fillEllipse(in: dotRect(center: CGPoint(x: 24 * scale, y: 60 * scale), radius: 3.5 * scale))
+    }
+
     context.restoreGState()
 
-    let chipWidth = size.width * 0.12
-    let chipHeight = size.height * 0.03
-    NSColor.white.withAlphaComponent(0.08).setFill()
-    roundedRect(CGRect(x: size.width * 0.21, y: size.height * 0.72, width: chipWidth, height: chipHeight), radius: chipHeight / 2).fill()
-    NSColor(red: 77 / 255, green: 234 / 255, blue: 190 / 255, alpha: 1).setFill()
-    roundedRect(CGRect(x: size.width * 0.21, y: size.height * 0.67, width: chipWidth * 1.6, height: chipHeight), radius: chipHeight / 2).fill()
-    NSColor(red: 255 / 255, green: 166 / 255, blue: 84 / 255, alpha: 1).setFill()
-    roundedRect(CGRect(x: size.width * 0.21, y: size.height * 0.62, width: chipWidth * 1.25, height: chipHeight), radius: chipHeight / 2).fill()
-
-    card.lineWidth = max(2, size.width * 0.01)
-    NSColor.white.withAlphaComponent(0.08).setStroke()
-    card.stroke()
+    // Hairline border on top
+    context.setStrokeColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.09))
+    context.setLineWidth(max(0.5, 1 * scale))
+    addRoundedRect(context: context, rect: bodyRect, radius: cornerRadius)
+    context.strokePath()
 }
+
+// MARK: - DMG background
 
 func drawDMGBackground(_ context: CGContext, _ size: CGSize) {
     let rect = CGRect(origin: .zero, size: size)
-    NSGradient(colors: [
-        NSColor(red: 6 / 255, green: 11 / 255, blue: 18 / 255, alpha: 1),
-        NSColor(red: 14 / 255, green: 21 / 255, blue: 33 / 255, alpha: 1),
-    ])?.draw(in: rect, angle: 0)
 
-    NSColor.white.withAlphaComponent(0.03).setFill()
-    NSBezierPath(ovalIn: CGRect(x: -120, y: 180, width: 300, height: 300)).fill()
-    NSColor(red: 77 / 255, green: 234 / 255, blue: 190 / 255, alpha: 0.07).setFill()
-    NSBezierPath(ovalIn: CGRect(x: 20, y: 90, width: 320, height: 320)).fill()
-    NSColor(red: 255 / 255, green: 166 / 255, blue: 84 / 255, alpha: 0.08).setFill()
-    NSBezierPath(ovalIn: CGRect(x: 440, y: 20, width: 260, height: 260)).fill()
+    // Base dark violet
+    context.setFillColor(neonBg)
+    context.fill(rect)
 
-    let iconInset = CGRect(x: 52, y: 117, width: 138, height: 138)
-    if let iconData = try? renderPNG(width: 1024, height: 1024, draw: drawIcon),
-       let image = NSImage(data: iconData) {
-        image.draw(in: iconInset)
+    // Three big radial glows to create the neon wash
+    drawRadialGlow(context: context, center: CGPoint(x: 140, y: 320), radius: 380,
+                   color: cg(neonViolet, alpha: 0.85))
+    drawRadialGlow(context: context, center: CGPoint(x: 600, y: 110), radius: 340,
+                   color: cg(neonCyan, alpha: 0.65))
+    drawRadialGlow(context: context, center: CGPoint(x: 360, y: -60), radius: 500,
+                   color: cg(neonPink, alpha: 0.45))
+
+    // Subtle 40px grid
+    context.saveGState()
+    context.setStrokeColor(whiteA05)
+    context.setLineWidth(1)
+    for x in stride(from: CGFloat(0), through: size.width, by: 40) {
+        context.move(to: CGPoint(x: x, y: 0))
+        context.addLine(to: CGPoint(x: x, y: size.height))
+    }
+    for y in stride(from: CGFloat(0), through: size.height, by: 40) {
+        context.move(to: CGPoint(x: 0, y: y))
+        context.addLine(to: CGPoint(x: size.width, y: y))
+    }
+    context.strokePath()
+    context.restoreGState()
+
+    // Brand header: "QUOTABAR" in a cyan→purple→pink gradient
+    drawGradientText(
+        context: context,
+        string: "QUOTABAR",
+        font: NSFont.systemFont(ofSize: 26, weight: .heavy),
+        tracking: 6,
+        center: CGPoint(x: size.width / 2, y: size.height - 44),
+        gradientColors: [neonCyan, neonPurple, neonPink]
+    )
+
+    // Subtitle
+    let subtitle = NSAttributedString(
+        string: "DROP · TO · INSTALL",
+        attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: ns(inkSoft),
+            .kern: NSNumber(value: 3.2),
+        ]
+    )
+    let subtitleSize = subtitle.size()
+    subtitle.draw(at: CGPoint(x: (size.width - subtitleSize.width) / 2, y: size.height - 72))
+
+    // Finder places the two icons at {180, 235} and {520, 235} in top-left-origin coords
+    // with icon size 128. Bottom-up: centers at y = 440 - 235 = 205. The label sits
+    // below the icon (~15-20px in Finder units), so the cells are taller than wide
+    // and their centers nudged down so the whole icon+label block is enclosed.
+    let cellWidth: CGFloat = 184
+    let cellHeight: CGFloat = 208
+    let cellCenterY: CGFloat = 188       // shifts cell down to include label band
+    let leftCellCenter  = CGPoint(x: 180, y: cellCenterY)
+    let rightCellCenter = CGPoint(x: 520, y: cellCenterY)
+    drawNeonCell(context: context, center: leftCellCenter,
+                 width: cellWidth, height: cellHeight, accent: neonCyan)
+    drawNeonCell(context: context, center: rightCellCenter,
+                 width: cellWidth, height: cellHeight, accent: neonPink)
+
+    // Arrow + drag pill — aim at icon height (not the taller cell's center)
+    let arrowY: CGFloat = 205
+    drawNeonArrow(
+        context: context,
+        from: CGPoint(x: leftCellCenter.x  + cellWidth / 2 + 10, y: arrowY),
+        to:   CGPoint(x: rightCellCenter.x - cellWidth / 2 - 10, y: arrowY)
+    )
+    drawDragBadge(
+        context: context,
+        center: CGPoint(x: (leftCellCenter.x + rightCellCenter.x) / 2, y: arrowY + 30),
+        accent: neonCyan
+    )
+
+    // Footer
+    let foot = NSAttributedString(
+        string: "macOS 13+  ·  universal · signed & notarized  ·  menu-bar only, no dock icon",
+        attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .regular),
+            .foregroundColor: ns(inkMuted),
+            .kern: NSNumber(value: 0.4),
+        ]
+    )
+    let footSize = foot.size()
+    foot.draw(at: CGPoint(x: (size.width - footSize.width) / 2, y: 22))
+}
+
+// MARK: - Neon primitives
+
+func drawNeonCell(context: CGContext, center: CGPoint, width: CGFloat, height: CGFloat, accent: CGColor) {
+    let rect = CGRect(x: center.x - width / 2, y: center.y - height / 2, width: width, height: height)
+
+    // Glass fill
+    context.saveGState()
+    addRoundedRect(context: context, rect: rect, radius: 26)
+    context.clip()
+    drawLinearGradient(
+        context: context,
+        rect: rect,
+        colors: [whiteA10, whiteA04],
+        start: CGPoint(x: rect.minX, y: rect.maxY),
+        end:   CGPoint(x: rect.maxX, y: rect.minY)
+    )
+    context.restoreGState()
+
+    // Soft accent glow behind the border stroke
+    context.saveGState()
+    context.setShadow(offset: .zero, blur: 24, color: cg(accent, alpha: 0.55))
+    context.setStrokeColor(whiteA18)
+    context.setLineWidth(1)
+    addRoundedRect(context: context, rect: rect, radius: 26)
+    context.strokePath()
+    context.restoreGState()
+
+    // Corner brackets (top-left + bottom-right)
+    let arm: CGFloat = 16
+    context.saveGState()
+    context.setStrokeColor(accent)
+    context.setLineWidth(2)
+    context.setLineCap(.round)
+
+    // Top-left bracket (top = high y in bottom-up space)
+    context.move(to: CGPoint(x: rect.minX, y: rect.maxY - arm))
+    context.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+    context.addLine(to: CGPoint(x: rect.minX + arm, y: rect.maxY))
+
+    // Bottom-right bracket
+    context.move(to: CGPoint(x: rect.maxX, y: rect.minY + arm))
+    context.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+    context.addLine(to: CGPoint(x: rect.maxX - arm, y: rect.minY))
+
+    context.strokePath()
+    context.restoreGState()
+}
+
+func drawNeonArrow(context: CGContext, from start: CGPoint, to end: CGPoint) {
+    let path = CGMutablePath()
+    path.move(to: start)
+    path.addLine(to: end)
+
+    // Soft glow underlay
+    strokeGradient(
+        context: context,
+        path: path,
+        lineWidth: 5,
+        start: start, end: end,
+        colors: [cg(neonCyan, alpha: 0.45), cg(neonPink, alpha: 0.45)]
+    )
+    // Crisp gradient core
+    strokeGradient(
+        context: context,
+        path: path,
+        lineWidth: 1.8,
+        start: start, end: end,
+        colors: [neonCyan, neonPink]
+    )
+
+    // Arrowhead (pink chevron)
+    context.saveGState()
+    context.setStrokeColor(neonPink)
+    context.setLineWidth(2.2)
+    context.setLineCap(.round)
+    context.setLineJoin(.round)
+    context.move(to: CGPoint(x: end.x - 11, y: end.y + 9))
+    context.addLine(to: end)
+    context.addLine(to: CGPoint(x: end.x - 11, y: end.y - 9))
+    context.strokePath()
+    context.restoreGState()
+}
+
+func drawDragBadge(context: CGContext, center: CGPoint, accent: CGColor) {
+    let attr = NSAttributedString(
+        string: "DRAG  →",
+        attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .bold),
+            .foregroundColor: ns(neonInk),
+            .kern: NSNumber(value: 3.0),
+        ]
+    )
+    let textSize = attr.size()
+    let padX: CGFloat = 12
+    let height: CGFloat = 22
+    let width = textSize.width + padX * 2
+    let rect = CGRect(x: center.x - width / 2, y: center.y - height / 2, width: width, height: height)
+
+    // Accent glow behind the pill
+    context.saveGState()
+    context.setShadow(offset: .zero, blur: 16, color: cg(accent, alpha: 0.65))
+    context.setFillColor(cg(accent, alpha: 0.14))
+    addRoundedRect(context: context, rect: rect, radius: 7)
+    context.fillPath()
+    context.restoreGState()
+
+    // Border
+    context.setStrokeColor(cg(accent, alpha: 0.8))
+    context.setLineWidth(1)
+    addRoundedRect(context: context, rect: rect, radius: 7)
+    context.strokePath()
+
+    // Text
+    attr.draw(at: CGPoint(x: rect.minX + padX, y: rect.midY - textSize.height / 2 + 1))
+}
+
+// MARK: - Gradient / shape helpers
+
+func drawRadialGlow(context: CGContext, center: CGPoint, radius: CGFloat, color: CGColor) {
+    let colors = [color, cg(color, alpha: 0)] as CFArray
+    guard let grad = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                                colors: colors, locations: [0, 1]) else { return }
+    context.drawRadialGradient(
+        grad,
+        startCenter: center, startRadius: 0,
+        endCenter: center,   endRadius: radius,
+        options: []
+    )
+}
+
+func drawLinearGradient(
+    context: CGContext,
+    rect: CGRect,
+    colors: [CGColor],
+    start: CGPoint,
+    end: CGPoint
+) {
+    guard let grad = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                                colors: colors as CFArray, locations: nil) else { return }
+    context.saveGState()
+    context.clip(to: rect)
+    context.drawLinearGradient(grad, start: start, end: end,
+                               options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    context.restoreGState()
+}
+
+func strokeGradient(
+    context: CGContext,
+    path: CGPath,
+    lineWidth: CGFloat,
+    start: CGPoint,
+    end: CGPoint,
+    colors: [CGColor]
+) {
+    guard let grad = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                                colors: colors as CFArray, locations: nil) else { return }
+    context.saveGState()
+    context.addPath(path)
+    context.setLineWidth(lineWidth)
+    context.setLineCap(.round)
+    context.setLineJoin(.round)
+    context.replacePathWithStrokedPath()
+    context.clip()
+    context.drawLinearGradient(grad, start: start, end: end,
+                               options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    context.restoreGState()
+}
+
+func drawGradientText(
+    context: CGContext,
+    string: String,
+    font: NSFont,
+    tracking: CGFloat,
+    center: CGPoint,
+    gradientColors: [CGColor]
+) {
+    let attr = NSAttributedString(
+        string: string,
+        attributes: [
+            .font: font,
+            .foregroundColor: NSColor.white,
+            .kern: NSNumber(value: Double(tracking)),
+        ]
+    )
+    let line = CTLineCreateWithAttributedString(attr)
+    let bounds = CTLineGetBoundsWithOptions(line, [])
+    let baseX = center.x - bounds.midX
+    let baseY = center.y - bounds.midY
+
+    let glyphPath = CGMutablePath()
+    let runs = CTLineGetGlyphRuns(line) as! [CTRun]
+    for run in runs {
+        let glyphCount = CTRunGetGlyphCount(run)
+        guard glyphCount > 0 else { continue }
+        let attrs = CTRunGetAttributes(run) as NSDictionary
+        guard let runFont = attrs[kCTFontAttributeName as String] else { continue }
+        let ctFont = runFont as! CTFont
+        var glyphs = [CGGlyph](repeating: 0, count: glyphCount)
+        var positions = [CGPoint](repeating: .zero, count: glyphCount)
+        CTRunGetGlyphs(run, CFRange(location: 0, length: glyphCount), &glyphs)
+        CTRunGetPositions(run, CFRange(location: 0, length: glyphCount), &positions)
+        for i in 0..<glyphCount {
+            guard let gp = CTFontCreatePathForGlyph(ctFont, glyphs[i], nil) else { continue }
+            let t = CGAffineTransform(translationX: baseX + positions[i].x, y: baseY + positions[i].y)
+            glyphPath.addPath(gp, transform: t)
+        }
     }
 
-    let title = NSAttributedString(
-        string: "QuotaBar",
-        attributes: [
-            .font: NSFont.systemFont(ofSize: 39, weight: .semibold),
-            .foregroundColor: NSColor(calibratedWhite: 1, alpha: 0.97),
-        ]
-    )
-    title.draw(at: CGPoint(x: 218, y: 274))
+    guard let grad = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                                colors: gradientColors as CFArray, locations: nil) else { return }
 
-    let subtitle = NSAttributedString(
-        string: "Track OpenAI and Anthropic budget from your menu bar.",
-        attributes: [
-            .font: NSFont.systemFont(ofSize: 17, weight: .regular),
-            .foregroundColor: NSColor(calibratedWhite: 1, alpha: 0.72),
-        ]
+    context.saveGState()
+    context.addPath(glyphPath)
+    context.clip()
+    context.drawLinearGradient(
+        grad,
+        start: CGPoint(x: baseX + bounds.minX, y: center.y),
+        end:   CGPoint(x: baseX + bounds.maxX, y: center.y),
+        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation]
     )
-    subtitle.draw(at: CGPoint(x: 220, y: 235))
-
-    let instruction = NSAttributedString(
-        string: "Drag QuotaBar into Applications to install.",
-        attributes: [
-            .font: NSFont.systemFont(ofSize: 20, weight: .medium),
-            .foregroundColor: NSColor(red: 239 / 255, green: 246 / 255, blue: 255 / 255, alpha: 0.96),
-        ]
-    )
-    instruction.draw(at: CGPoint(x: 56, y: 40))
-
-    let detail = NSAttributedString(
-        string: "Menu bar app. Signed release. No extra setup required.",
-        attributes: [
-            .font: NSFont.systemFont(ofSize: 13, weight: .regular),
-            .foregroundColor: NSColor(calibratedWhite: 1, alpha: 0.55),
-        ]
-    )
-    detail.draw(at: CGPoint(x: 58, y: 18))
-
-    let arrow = NSBezierPath()
-    arrow.move(to: CGPoint(x: 258, y: 214))
-    arrow.curve(
-        to: CGPoint(x: 520, y: 214),
-        controlPoint1: CGPoint(x: 330, y: 250),
-        controlPoint2: CGPoint(x: 430, y: 250)
-    )
-    arrow.lineWidth = 7
-    arrow.lineCapStyle = .round
-    NSColor(red: 239 / 255, green: 246 / 255, blue: 255 / 255, alpha: 0.68).setStroke()
-    arrow.stroke()
-
-    let arrowHead = NSBezierPath()
-    arrowHead.move(to: CGPoint(x: 510, y: 228))
-    arrowHead.line(to: CGPoint(x: 540, y: 214))
-    arrowHead.line(to: CGPoint(x: 510, y: 200))
-    arrowHead.lineWidth = 7
-    arrowHead.lineCapStyle = .round
-    arrowHead.lineJoinStyle = .round
-    arrowHead.stroke()
-
-    let appLabel = badge(text: "QuotaBar.app", width: 122)
-    appLabel.draw(
-        in: CGRect(x: 117, y: 337, width: 122, height: 30),
-        from: .zero,
-        operation: .sourceOver,
-        fraction: 1
-    )
-
-    let appsLabel = badge(text: "Applications", width: 124)
-    appsLabel.draw(
-        in: CGRect(x: 458, y: 337, width: 124, height: 30),
-        from: .zero,
-        operation: .sourceOver,
-        fraction: 1
-    )
+    context.restoreGState()
 }
 
-func badge(text: String, width: CGFloat) -> NSImage {
-    let size = CGSize(width: width, height: 30)
-    let image = NSImage(size: size)
-    image.lockFocus()
-    let rect = CGRect(origin: .zero, size: size)
-    NSColor.white.withAlphaComponent(0.08).setFill()
-    roundedRect(rect, radius: 15).fill()
-    let textRect = rect.insetBy(dx: 12, dy: 6)
-    let attr = NSAttributedString(
-        string: text,
-        attributes: [
-            .font: NSFont.systemFont(ofSize: 12, weight: .medium),
-            .foregroundColor: NSColor(calibratedWhite: 1, alpha: 0.85),
-        ]
-    )
-    attr.draw(in: textRect)
-    image.unlockFocus()
-    return image
+// MARK: - Small helpers
+
+func addRoundedRect(context: CGContext, rect: CGRect, radius: CGFloat) {
+    let path = CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
+    context.addPath(path)
 }
 
-func roundedRect(_ rect: CGRect, radius: CGFloat) -> NSBezierPath {
-    NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-}
-
-func strokeArc(in rect: CGRect, startAngle: CGFloat, endAngle: CGFloat, lineWidth: CGFloat, color: NSColor) {
-    let path = NSBezierPath()
-    path.appendArc(withCenter: CGPoint(x: rect.midX, y: rect.midY), radius: rect.width / 2, startAngle: startAngle, endAngle: endAngle)
-    path.lineWidth = lineWidth
-    path.lineCapStyle = .round
-    color.setStroke()
-    path.stroke()
+func dotRect(center: CGPoint, radius: CGFloat) -> CGRect {
+    CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
 }

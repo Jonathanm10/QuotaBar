@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>QuotaBar DMG · Runway</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:#0a0b0e;min-height:100vh;
+    font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    color:#eef0f3;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:30px 16px;
+  }
+  .row{display:flex;gap:28px;align-items:center}
+  .preview{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .preview small{color:#6b7280;font-size:11px;letter-spacing:.6px;text-transform:uppercase}
+  .icon-lg{width:128px;height:128px;filter:drop-shadow(0 18px 24px rgba(0,0,0,.55))}
+
+  .window{
+    width:720px;height:468px;border-radius:12px;overflow:hidden;
+    box-shadow:0 24px 60px rgba(0,0,0,.6);
+    border:1px solid rgba(255,255,255,.08);
+  }
+  .chrome{
+    height:28px;background:linear-gradient(180deg,#1b1d22,#121318);
+    display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid #000;
+  }
+  .tl{width:12px;height:12px;border-radius:50%}
+  .tl.r{background:#ff5f57}.tl.y{background:#febc2e}.tl.g{background:#28c840}
+  .title{margin-left:10px;font-size:12px;color:#b7bdc8;font-weight:500}
+
+  .stage{
+    position:relative;width:100%;height:440px;overflow:hidden;
+    background:
+      radial-gradient(1200px 600px at 50% 130%, #121722 0%, transparent 60%),
+      #06080c;
+  }
+  .scan{position:absolute;inset:0;pointer-events:none;opacity:.35;
+    background-image:linear-gradient(180deg,rgba(255,255,255,.035) 1px,transparent 1px);
+    background-size:100% 6px}
+  .giant{
+    position:absolute;left:-6px;right:-6px;top:36px;text-align:center;
+    font:900 190px/1 "SF Pro Display","Inter",system-ui,sans-serif;letter-spacing:-8px;
+    color:transparent;
+    -webkit-text-stroke:1.5px rgba(255,255,255,.08);
+    user-select:none;pointer-events:none;
+  }
+  .sub{
+    position:absolute;top:18px;left:0;right:0;text-align:center;
+    color:#7b8594;font-size:12px;letter-spacing:3px;text-transform:uppercase;
+  }
+  .sub b{color:#c9d2df;font-weight:600;letter-spacing:4px}
+
+  .slot{
+    position:absolute;top:172px;width:180px;display:flex;flex-direction:column;align-items:center;gap:10px;
+  }
+  .slot.left{left:60px}.slot.right{right:60px}
+  .step{
+    font:700 11px/1 "SF Mono",ui-monospace,Menlo,monospace;letter-spacing:2px;color:#4deaba;
+  }
+  .slot.right .step{color:#ffa654}
+  .ic{width:112px;height:112px;filter:drop-shadow(0 16px 22px rgba(0,0,0,.6))}
+  .lbl{font-size:13px;color:#eef0f3;font-weight:600;letter-spacing:-.1px;margin-top:2px}
+  .lbl small{display:block;color:#8a94a6;font-size:11px;font-weight:400;letter-spacing:0;margin-top:2px}
+
+  .rail{
+    position:absolute;top:225px;left:246px;right:246px;height:2px;
+    background:linear-gradient(90deg,rgba(77,234,186,.0),rgba(77,234,186,.8) 20%,rgba(234,243,255,.9) 50%,rgba(255,166,84,.8) 80%,rgba(255,166,84,.0));
+  }
+  .rail::before,.rail::after{
+    content:"";position:absolute;top:-4px;width:10px;height:10px;border-radius:50%;
+  }
+  .rail::before{left:-4px;background:#4deaba;box-shadow:0 0 18px #4deaba}
+  .rail::after{right:-4px;background:#ffa654;box-shadow:0 0 18px #ffa654}
+
+  .foot{
+    position:absolute;left:0;right:0;bottom:18px;text-align:center;
+    color:#5e6775;font-size:11px;letter-spacing:.4px;
+  }
+  .foot b{color:#9aa3af;font-weight:500}
+</style>
+</head>
+<body>
+
+  <div class="row">
+    <div class="preview">
+      <svg class="icon-lg" viewBox="0 0 128 128">
+        <defs>
+          <linearGradient id="a2-body" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#0d0f14"/><stop offset="1" stop-color="#05070a"/>
+          </linearGradient>
+        </defs>
+        <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#a2-body)"
+              stroke="rgba(255,255,255,.08)"/>
+        <text x="64" y="84" text-anchor="middle"
+              font-family="SF Pro Display,Inter,system-ui" font-weight="900" font-size="78"
+              fill="none" stroke="#4deaba" stroke-width="2">$</text>
+        <circle cx="64" cy="60" r="38" fill="none" stroke="#4deaba" stroke-opacity=".3" stroke-width="1"/>
+        <circle cx="64" cy="60" r="46" fill="none" stroke="#ffa654" stroke-opacity=".15" stroke-width="1"/>
+        <rect x="22" y="102" width="84" height="2" rx="1" fill="#4deaba" opacity=".6"/>
+        <rect x="22" y="102" width="54" height="2" rx="1" fill="#4deaba"/>
+      </svg>
+      <small>Icon · 128</small>
+    </div>
+
+    <div class="window">
+      <div class="chrome">
+        <div class="tl r"></div><div class="tl y"></div><div class="tl g"></div>
+        <div class="title">QuotaBar</div>
+      </div>
+      <div class="stage">
+        <div class="scan"></div>
+        <div class="giant">QUOTA</div>
+        <div class="sub"><b>Install</b> · two steps · zero config</div>
+
+        <div class="slot left">
+          <div class="step">01 · APP</div>
+          <svg class="ic" viewBox="0 0 128 128">
+            <rect x="6" y="6" width="116" height="116" rx="28" fill="#0d0f14" stroke="rgba(255,255,255,.08)"/>
+            <text x="64" y="84" text-anchor="middle"
+                  font-family="SF Pro Display,Inter,system-ui" font-weight="900" font-size="78"
+                  fill="none" stroke="#4deaba" stroke-width="2">$</text>
+            <rect x="22" y="102" width="84" height="2" rx="1" fill="#4deaba" opacity=".6"/>
+            <rect x="22" y="102" width="54" height="2" rx="1" fill="#4deaba"/>
+          </svg>
+          <div class="lbl">QuotaBar<small>drag me →</small></div>
+        </div>
+
+        <div class="slot right">
+          <div class="step">02 · INSTALL</div>
+          <svg class="ic" viewBox="0 0 128 128">
+            <defs>
+              <linearGradient id="fld2" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#7cc4ff"/><stop offset="1" stop-color="#3d86e0"/>
+              </linearGradient>
+            </defs>
+            <path d="M14 36 Q14 28 22 28 H50 L58 36 H106 Q114 36 114 44 V96 Q114 106 104 106 H24 Q14 106 14 96 Z"
+                  fill="url(#fld2)"/>
+            <path d="M14 50 H114 V96 Q114 106 104 106 H24 Q14 106 14 96 Z"
+                  fill="rgba(255,255,255,.08)"/>
+          </svg>
+          <div class="lbl">Applications<small>drop here</small></div>
+        </div>
+
+        <div class="rail"></div>
+
+        <div class="foot">v<b>0.1</b> · universal binary · signed &amp; notarized · macOS 13+</div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

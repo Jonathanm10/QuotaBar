@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>QuotaBar DMG · Aurora</title>
+<style>
+  :root{
+    --teal:#4deaba;--amber:#ffa654;--ink:#eef6ff;--ink2:#c3cfdd;--ink3:#7a8699;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:#0b0c10;min-height:100vh;
+    font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    color:#eef0f3;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:30px 16px;
+  }
+  .row{display:flex;gap:28px;align-items:center}
+  .preview{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .preview small{color:#6b7280;font-size:11px;letter-spacing:.6px;text-transform:uppercase}
+
+  /* ---------- app icon (rendered at 128, retina scaled) ---------- */
+  .icon-lg{width:128px;height:128px;filter:drop-shadow(0 18px 24px rgba(0,0,0,.55))}
+
+  /* ---------- DMG window chrome ---------- */
+  .window{
+    width:720px;height:468px;border-radius:12px;overflow:hidden;
+    box-shadow:0 24px 60px rgba(0,0,0,.55),0 2px 0 rgba(255,255,255,.04) inset;
+    border:1px solid rgba(255,255,255,.08);
+    position:relative;isolation:isolate;
+  }
+  .chrome{
+    height:28px;background:linear-gradient(180deg,#26292f,#1b1d22);
+    display:flex;align-items:center;gap:8px;padding:0 12px;
+    border-bottom:1px solid #0c0d10;
+  }
+  .tl{width:12px;height:12px;border-radius:50%;box-shadow:0 0 0 .5px rgba(0,0,0,.45) inset}
+  .tl.r{background:#ff5f57}.tl.y{background:#febc2e}.tl.g{background:#28c840}
+  .title{margin-left:10px;font-size:12px;color:#b7bdc8;font-weight:500}
+
+  /* ---------- stage ---------- */
+  .stage{position:relative;width:100%;height:440px;overflow:hidden}
+
+  /* Aurora background */
+  .stage.aurora{
+    background:
+      radial-gradient(620px 340px at 12% 25%, rgba(77,234,186,.22), transparent 65%),
+      radial-gradient(520px 300px at 88% 78%, rgba(255,166,84,.20), transparent 65%),
+      radial-gradient(900px 500px at 50% 120%, rgba(60,120,200,.10), transparent 60%),
+      linear-gradient(180deg,#0a1220 0%,#070b15 100%);
+  }
+  .grain{position:absolute;inset:0;opacity:.08;mix-blend-mode:overlay;pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,.25) 1px,transparent 1px);background-size:3px 3px}
+
+  .brand{
+    position:absolute;top:22px;left:28px;display:flex;align-items:center;gap:10px;
+    color:var(--ink);letter-spacing:-.2px;
+  }
+  .brand .mark{width:22px;height:22px}
+  .brand b{font-weight:700;font-size:15px}
+  .brand span{color:var(--ink3);font-size:12px;margin-left:6px}
+
+  .tagline{
+    position:absolute;top:22px;right:28px;color:var(--ink2);font-size:12px;letter-spacing:.2px;
+  }
+  .tagline b{color:var(--teal);font-weight:600}
+
+  .slot{
+    position:absolute;top:170px;width:160px;display:flex;flex-direction:column;align-items:center;gap:12px;
+  }
+  .slot.left{left:74px}
+  .slot.right{right:74px}
+  .slot .ic{width:112px;height:112px;filter:drop-shadow(0 14px 20px rgba(0,0,0,.55))}
+  .slot .lbl{
+    font-size:12px;color:var(--ink);
+    background:rgba(10,16,28,.55);border:1px solid rgba(255,255,255,.08);
+    padding:4px 10px;border-radius:999px;backdrop-filter:blur(6px);
+  }
+
+  .arrow{position:absolute;left:232px;top:205px;width:256px;height:70px;overflow:visible}
+  .foot{
+    position:absolute;left:0;right:0;bottom:18px;display:flex;justify-content:center;gap:18px;
+    color:var(--ink3);font-size:11px;letter-spacing:.3px;
+  }
+  .foot b{color:var(--ink2);font-weight:500}
+</style>
+</head>
+<body>
+
+  <!-- Standalone icon preview -->
+  <div class="row">
+    <div class="preview">
+      <svg class="icon-lg" viewBox="0 0 128 128">
+        <defs>
+          <linearGradient id="a1-body" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#121c29"/><stop offset="1" stop-color="#0a0f18"/>
+          </linearGradient>
+          <radialGradient id="a1-halo" cx=".25" cy=".55" r=".7">
+            <stop offset="0" stop-color="#4deaba" stop-opacity=".45"/>
+            <stop offset="1" stop-color="#4deaba" stop-opacity="0"/>
+          </radialGradient>
+          <radialGradient id="a1-glow" cx=".75" cy=".35" r=".65">
+            <stop offset="0" stop-color="#ffa654" stop-opacity=".35"/>
+            <stop offset="1" stop-color="#ffa654" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#a1-body)"
+              stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+        <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#a1-halo)"/>
+        <rect x="6" y="6" width="116" height="116" rx="28" fill="url(#a1-glow)"/>
+        <g transform="translate(64 64)" fill="none" stroke-linecap="round" stroke-width="11">
+          <path d="M -28 20 A 34 34 0 0 1 -4 -33" stroke="#4deaba"/>
+          <path d="M 5 -34 A 34 34 0 0 1 28 -18" stroke="#eaf3ff"/>
+          <path d="M 30 -12 A 34 34 0 0 1 20 28" stroke="#ffa654"/>
+        </g>
+        <g transform="translate(64 64) rotate(38)">
+          <rect x="20" y="-6" width="16" height="12" rx="3" fill="#eaf3ff"/>
+        </g>
+        <g transform="translate(28 92)">
+          <rect width="18" height="4" rx="2" fill="rgba(255,255,255,.1)"/>
+          <rect y="-8" width="30" height="4" rx="2" fill="#4deaba"/>
+          <rect y="-16" width="24" height="4" rx="2" fill="#ffa654"/>
+        </g>
+      </svg>
+      <small>Icon · 128</small>
+    </div>
+
+    <!-- DMG window -->
+    <div class="window">
+      <div class="chrome">
+        <div class="tl r"></div><div class="tl y"></div><div class="tl g"></div>
+        <div class="title">QuotaBar</div>
+      </div>
+      <div class="stage aurora">
+        <div class="grain"></div>
+
+        <div class="brand">
+          <svg class="mark" viewBox="0 0 128 128">
+            <rect x="6" y="6" width="116" height="116" rx="28" fill="#0e1624"/>
+            <g transform="translate(64 64)" fill="none" stroke-width="14" stroke-linecap="round">
+              <path d="M -30 22 A 36 36 0 0 1 -4 -36" stroke="#4deaba"/>
+              <path d="M 8 -36 A 36 36 0 0 1 30 22" stroke="#ffa654"/>
+            </g>
+          </svg>
+          <b>QuotaBar</b><span>AI budget in your menu bar</span>
+        </div>
+        <div class="tagline">Drag the app into <b>Applications</b></div>
+
+        <!-- Left: app icon slot -->
+        <div class="slot left">
+          <svg class="ic" viewBox="0 0 128 128">
+            <rect x="6" y="6" width="116" height="116" rx="28" fill="#0e1624" stroke="rgba(255,255,255,.07)"/>
+            <g transform="translate(64 64)" fill="none" stroke-linecap="round" stroke-width="11">
+              <path d="M -28 20 A 34 34 0 0 1 -4 -33" stroke="#4deaba"/>
+              <path d="M 5 -34 A 34 34 0 0 1 28 -18" stroke="#eaf3ff"/>
+              <path d="M 30 -12 A 34 34 0 0 1 20 28" stroke="#ffa654"/>
+            </g>
+          </svg>
+          <div class="lbl">QuotaBar.app</div>
+        </div>
+
+        <!-- Right: Applications slot -->
+        <div class="slot right">
+          <svg class="ic" viewBox="0 0 128 128">
+            <defs>
+              <linearGradient id="fld1" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#7cc4ff"/><stop offset="1" stop-color="#3d86e0"/>
+              </linearGradient>
+            </defs>
+            <path d="M14 36 Q14 28 22 28 H50 L58 36 H106 Q114 36 114 44 V96 Q114 106 104 106 H24 Q14 106 14 96 Z"
+                  fill="url(#fld1)" stroke="rgba(0,0,0,.25)"/>
+            <path d="M14 50 H114 V96 Q114 106 104 106 H24 Q14 106 14 96 Z"
+                  fill="rgba(255,255,255,.08)"/>
+          </svg>
+          <div class="lbl">Applications</div>
+        </div>
+
+        <!-- Curved arrow -->
+        <svg class="arrow" viewBox="0 0 256 70">
+          <defs>
+            <linearGradient id="a1-arrow" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#4deaba" stop-opacity=".2"/>
+              <stop offset=".5" stop-color="#eaf3ff" stop-opacity=".9"/>
+              <stop offset="1" stop-color="#ffa654" stop-opacity=".2"/>
+            </linearGradient>
+          </defs>
+          <path d="M4 48 Q128 -4 248 38" fill="none" stroke="url(#a1-arrow)" stroke-width="3"
+                stroke-linecap="round" stroke-dasharray="1 7"/>
+          <path d="M238 28 L254 38 L238 50" fill="none" stroke="#ffa654" stroke-width="3"
+                stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>
+        </svg>
+
+        <div class="foot">
+          <span><b>macOS 13+</b></span><span>·</span>
+          <span>Signed &amp; notarized</span><span>·</span>
+          <span>Menu-bar only · no dock icon</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

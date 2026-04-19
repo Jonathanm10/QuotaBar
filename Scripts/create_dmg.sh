@@ -25,6 +25,13 @@ if [[ ! -f "$BACKGROUND_FILE" ]]; then
   exit 1
 fi
 
+# Iterating on the icon without a full rebuild? Refresh it into the app bundle,
+# but only when it's unsigned — after codesign runs (in CI) the bundle is frozen.
+if [[ -f "$ARTIFACTS_DIR/QuotaBar.icns" ]] \
+   && ! codesign -dv "$APP_DIR" >/dev/null 2>&1; then
+  cp "$ARTIFACTS_DIR/QuotaBar.icns" "$APP_DIR/Contents/Resources/QuotaBar.icns"
+fi
+
 STAGING_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${APP_NAME}-dmg.XXXXXX")"
 RW_DMG="$STAGING_DIR/${APP_NAME}-${VERSION}-rw.dmg"
 SOURCE_DIR="$STAGING_DIR/source"

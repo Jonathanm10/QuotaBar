@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>QuotaBar DMG · Receipt</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:#0b0c10;min-height:100vh;
+    font:13px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+    color:#eef0f3;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:30px 16px;
+  }
+  .row{display:flex;gap:28px;align-items:center}
+  .preview{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .preview small{color:#6b7280;font-size:11px;letter-spacing:.6px;text-transform:uppercase}
+  .icon-lg{width:128px;height:128px;filter:drop-shadow(0 18px 22px rgba(0,0,0,.35))}
+
+  .window{
+    width:720px;height:468px;border-radius:12px;overflow:hidden;
+    box-shadow:0 24px 60px rgba(0,0,0,.5);
+    border:1px solid rgba(0,0,0,.15);
+  }
+  .chrome{
+    height:28px;background:linear-gradient(180deg,#efe9db,#e1dac7);
+    display:flex;align-items:center;gap:8px;padding:0 12px;
+    border-bottom:1px solid #c7bfa7;
+  }
+  .tl{width:12px;height:12px;border-radius:50%}
+  .tl.r{background:#ff5f57}.tl.y{background:#febc2e}.tl.g{background:#28c840}
+  .title{margin-left:10px;font-size:12px;color:#54503f;font-weight:500;font-family:"Iowan Old Style",Georgia,serif}
+
+  .stage{
+    position:relative;width:100%;height:440px;overflow:hidden;color:#1c1a13;
+    background:
+      radial-gradient(1000px 500px at 50% -10%, #fff6e4 0%, transparent 60%),
+      repeating-linear-gradient(0deg, rgba(120,90,30,.04) 0 1px, transparent 1px 4px),
+      #f3ead2;
+  }
+  .fiber{position:absolute;inset:0;pointer-events:none;opacity:.35;mix-blend-mode:multiply;
+    background-image:
+      radial-gradient(rgba(100,70,20,.18) 1px,transparent 1.5px),
+      radial-gradient(rgba(100,70,20,.12) 1px,transparent 1.5px);
+    background-size:5px 5px,13px 13px;
+    background-position:0 0,3px 7px;
+  }
+  .edge{
+    position:absolute;left:28px;right:28px;top:28px;bottom:28px;
+    border:1px solid #b7a878;border-radius:4px;pointer-events:none;
+  }
+  .edge::before{content:"";position:absolute;inset:4px;border:1px dashed #b7a878;border-radius:3px}
+
+  .head{
+    position:absolute;top:46px;left:0;right:0;text-align:center;
+    font-family:"Iowan Old Style",Georgia,"Times New Roman",serif;color:#24200f;
+  }
+  .head .kicker{
+    font:500 10px/1 "SF Mono",ui-monospace,Menlo,monospace;letter-spacing:6px;color:#6b5a2a;
+    text-transform:uppercase;margin-bottom:10px;
+  }
+  .head h1{
+    margin:0;font-size:34px;font-weight:700;letter-spacing:8px;text-transform:uppercase;
+  }
+  .rule{
+    position:absolute;top:112px;left:80px;right:80px;height:2px;
+    background:linear-gradient(90deg,transparent,#4b3f1a,transparent);
+  }
+  .rule::before,.rule::after{
+    content:"";position:absolute;top:-3px;width:8px;height:8px;border-radius:50%;background:#4b3f1a;
+  }
+  .rule::before{left:-4px}.rule::after{right:-4px}
+
+  .slot{
+    position:absolute;top:170px;width:180px;display:flex;flex-direction:column;align-items:center;gap:8px;
+  }
+  .slot.left{left:60px}.slot.right{right:60px}
+  .ic{width:108px;height:108px;filter:drop-shadow(0 8px 12px rgba(60,40,0,.2))}
+  .num{
+    font-family:"Iowan Old Style",Georgia,serif;font-weight:700;font-size:13px;letter-spacing:3px;
+    color:#7a6530;text-transform:uppercase;margin-bottom:4px;
+  }
+  .lbl{
+    font-family:"Iowan Old Style",Georgia,serif;font-size:14px;color:#1c1a13;font-weight:600;
+    letter-spacing:.4px;
+  }
+  .sublbl{font:500 10px/1 "SF Mono",Menlo,monospace;color:#6b5a2a;letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+
+  .arrow{position:absolute;left:240px;top:222px;width:260px;height:40px;overflow:visible}
+
+  .foot{
+    position:absolute;left:64px;right:64px;bottom:42px;
+    display:flex;justify-content:space-between;align-items:center;
+    font:500 10px/1 "SF Mono",Menlo,monospace;color:#6b5a2a;letter-spacing:3px;text-transform:uppercase;
+  }
+  .foot b{color:#2b2611;font-weight:700}
+</style>
+</head>
+<body>
+
+  <div class="row">
+    <div class="preview">
+      <svg class="icon-lg" viewBox="0 0 128 128">
+        <defs>
+          <linearGradient id="a5-body" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#f3ead2"/><stop offset="1" stop-color="#e4d8b4"/>
+          </linearGradient>
+          <pattern id="a5-fiber" x="0" y="0" width="5" height="5" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r=".6" fill="rgba(80,60,20,.18)"/>
+          </pattern>
+        </defs>
+        <rect x="6" y="6" width="116" height="116" rx="24" fill="url(#a5-body)"
+              stroke="#b7a878"/>
+        <rect x="6" y="6" width="116" height="116" rx="24" fill="url(#a5-fiber)"/>
+        <rect x="14" y="14" width="100" height="100" rx="16" fill="none" stroke="#a3935f" stroke-dasharray="2 3"/>
+        <text x="64" y="74" text-anchor="middle"
+              font-family="Iowan Old Style, Georgia, serif" font-weight="700" font-size="62"
+              fill="#2b2611">Q</text>
+        <circle cx="64" cy="64" r="40" fill="none" stroke="#2b2611" stroke-width="1.5"/>
+        <circle cx="64" cy="64" r="30" fill="none" stroke="#a3935f" stroke-width="1"/>
+        <rect x="40" y="94" width="48" height="2" fill="#2b2611"/>
+        <text x="64" y="108" text-anchor="middle"
+              font-family="SF Mono,Menlo,monospace" font-size="7" letter-spacing="3" fill="#6b5a2a">QUOTA · BAR</text>
+      </svg>
+      <small>Icon · 128</small>
+    </div>
+
+    <div class="window">
+      <div class="chrome">
+        <div class="tl r"></div><div class="tl y"></div><div class="tl g"></div>
+        <div class="title">QuotaBar</div>
+      </div>
+      <div class="stage">
+        <div class="fiber"></div>
+        <div class="edge"></div>
+
+        <div class="head">
+          <div class="kicker">No. 01 · Install Ticket</div>
+          <h1>QuotaBar</h1>
+        </div>
+        <div class="rule"></div>
+
+        <div class="slot left">
+          <div class="num">— One —</div>
+          <svg class="ic" viewBox="0 0 128 128">
+            <rect x="6" y="6" width="116" height="116" rx="24" fill="#f3ead2" stroke="#b7a878"/>
+            <rect x="14" y="14" width="100" height="100" rx="16" fill="none" stroke="#a3935f" stroke-dasharray="2 3"/>
+            <text x="64" y="74" text-anchor="middle"
+                  font-family="Iowan Old Style,Georgia,serif" font-weight="700" font-size="62"
+                  fill="#2b2611">Q</text>
+            <circle cx="64" cy="64" r="40" fill="none" stroke="#2b2611" stroke-width="1.5"/>
+          </svg>
+          <div class="lbl">QuotaBar.app</div>
+          <div class="sublbl">lift here</div>
+        </div>
+
+        <div class="slot right">
+          <div class="num">— Two —</div>
+          <svg class="ic" viewBox="0 0 128 128">
+            <defs>
+              <linearGradient id="fld5" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#c9a24d"/><stop offset="1" stop-color="#8a6a24"/>
+              </linearGradient>
+            </defs>
+            <path d="M14 36 Q14 28 22 28 H50 L58 36 H106 Q114 36 114 44 V96 Q114 106 104 106 H24 Q14 106 14 96 Z"
+                  fill="url(#fld5)"/>
+            <path d="M14 50 H114 V96 Q114 106 104 106 H24 Q14 106 14 96 Z"
+                  fill="rgba(255,255,255,.15)"/>
+          </svg>
+          <div class="lbl">Applications</div>
+          <div class="sublbl">drop here</div>
+        </div>
+
+        <svg class="arrow" viewBox="0 0 260 40">
+          <path d="M4 22 L246 22" fill="none" stroke="#4b3f1a" stroke-width="1.25" stroke-dasharray="4 4"/>
+          <path d="M236 14 L250 22 L236 30" fill="none" stroke="#4b3f1a" stroke-width="1.25"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+
+        <div class="foot">
+          <span>macOS <b>13+</b></span>
+          <span>Signed · Notarized</span>
+          <span>v<b>0.1</b></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
