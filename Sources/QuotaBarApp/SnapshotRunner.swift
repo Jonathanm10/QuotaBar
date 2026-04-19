@@ -21,7 +21,7 @@ enum SnapshotRunner {
         ))
         state.lastRefreshAt = now.addingTimeInterval(-8)
 
-        let view = DashboardView(state: state, onRefresh: {}, onQuit: {})
+        let view = DashboardView(state: state, preferences: Preferences.shared, onRefresh: {}, onQuit: {})
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2.0
         renderer.isOpaque = true

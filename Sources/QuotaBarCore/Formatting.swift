@@ -41,10 +41,21 @@ public enum Formatting {
         relativeFormatter().localizedString(for: date, relativeTo: Date())
     }
 
-    public static func compactUsage(_ snapshot: ProviderSnapshot) -> String {
-        let short = snapshot.daily.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—"
-        let weekly = snapshot.weekly.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—"
-        return "\(short)/\(weekly)"
+    public static func compactUsage(
+        _ snapshot: ProviderSnapshot,
+        includesWeekly: Bool = true,
+        showRemaining: Bool = false
+    ) -> String {
+        let dailyText = formatPercent(snapshot.daily?.usedPercent, showRemaining: showRemaining)
+        guard includesWeekly else { return dailyText }
+        let weeklyText = formatPercent(snapshot.weekly?.usedPercent, showRemaining: showRemaining)
+        return "\(dailyText)/\(weeklyText)"
+    }
+
+    private static func formatPercent(_ used: Double?, showRemaining: Bool) -> String {
+        guard let used else { return "—" }
+        let value = showRemaining ? max(0, 100 - used) : used
+        return "\(Int(value.rounded()))%"
     }
 
     public static func paceLabel(_ pace: UsagePace?) -> String {

@@ -7,6 +7,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private let state = AppState()
+    private let preferences = Preferences.shared
     private let snapshotStore = SnapshotStore()
     private let refreshCoordinator = RefreshCoordinator(providers: [
         OpenAIProvider(),
@@ -61,6 +62,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         self.popover.contentSize = NSSize(width: 380, height: 380)
         let root = DashboardView(
             state: self.state,
+            preferences: self.preferences,
             onRefresh: { [weak self] in
                 guard let self else { return }
                 Task { await self.refresh(trigger: .manual) }
@@ -132,6 +134,26 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         refreshItem.target = self
         menu.addItem(refreshItem)
         menu.addItem(.separator())
+
+        let weeklyItem = NSMenuItem(
+            title: "Show Weekly in Menu Bar",
+            action: #selector(self.handleToggleWeeklyInStatusBar),
+            keyEquivalent: ""
+        )
+        weeklyItem.target = self
+        weeklyItem.state = self.preferences.showWeeklyInStatusBar ? .on : .off
+        menu.addItem(weeklyItem)
+
+        let remainingItem = NSMenuItem(
+            title: "Show Percent Remaining",
+            action: #selector(self.handleTogglePercentRemaining),
+            keyEquivalent: ""
+        )
+        remainingItem.target = self
+        remainingItem.state = self.preferences.showPercentRemaining ? .on : .off
+        menu.addItem(remainingItem)
+
+        menu.addItem(.separator())
         let quitItem = NSMenuItem(title: "Quit QuotaBar", action: #selector(self.handleQuit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -142,7 +164,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func shouldRefreshOnOpen() -> Bool {
         let oldest = self.state.snapshots.values.map(\.fetchedAt).min() ?? .distantPast
-        return Date().timeIntervalSince(oldest) > 5 * 60
+        return Date().timeIntervalSince(oldest) > 30
     }
 
     // MARK: - Data
@@ -216,7 +238,11 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private func updateStatusBar() {
         guard let button = self.statusItem.button else { return }
         let snapshots = self.state.orderedSnapshots
-        let image = StatusBarRenderer.render(snapshots: snapshots)
+        let image = StatusBarRenderer.render(
+            snapshots: snapshots,
+            includesWeekly: self.preferences.showWeeklyInStatusBar,
+            showRemaining: self.preferences.showPercentRemaining
+        )
         button.image = image
         button.imagePosition = .imageOnly
         button.title = ""
@@ -227,6 +253,18 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc
     private func handleManualRefresh() {
         Task { await self.refresh(trigger: .manual) }
+    }
+
+    @objc
+    private func handleToggleWeeklyInStatusBar() {
+        self.preferences.showWeeklyInStatusBar.toggle()
+        self.updateStatusBar()
+    }
+
+    @objc
+    private func handleTogglePercentRemaining() {
+        self.preferences.showPercentRemaining.toggle()
+        self.updateStatusBar()
     }
 
     @objc

@@ -3,7 +3,11 @@ import QuotaBarCore
 
 @MainActor
 enum StatusBarRenderer {
-    static func render(snapshots: [ProviderSnapshot]) -> NSImage {
+    static func render(
+        snapshots: [ProviderSnapshot],
+        includesWeekly: Bool = true,
+        showRemaining: Bool = false
+    ) -> NSImage {
         let height: CGFloat = 18
         let logoSize: CGFloat = 13
         let logoTextSpacing: CGFloat = 4
@@ -24,7 +28,11 @@ enum StatusBarRenderer {
         let tokens: [(NSImage, NSAttributedString)] = snapshots.map { snapshot in
             let logo = BrandLogos.nsImage(for: snapshot.provider)
             let string = NSAttributedString(
-                string: Formatting.compactUsage(snapshot),
+                string: Formatting.compactUsage(
+                    snapshot,
+                    includesWeekly: includesWeekly,
+                    showRemaining: showRemaining
+                ),
                 attributes: textAttributes
             )
             return (logo, string)

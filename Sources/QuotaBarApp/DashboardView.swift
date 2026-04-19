@@ -3,6 +3,7 @@ import QuotaBarCore
 
 struct DashboardView: View {
     @Bindable var state: AppState
+    @Bindable var preferences: Preferences
     var onRefresh: () -> Void
     var onQuit: () -> Void
 
@@ -53,7 +54,7 @@ struct DashboardView: View {
         } else {
             VStack(spacing: 10) {
                 ForEach(state.orderedSnapshots, id: \.provider) { snapshot in
-                    ProviderCardView(snapshot: snapshot)
+                    ProviderCardView(snapshot: snapshot, showRemaining: preferences.showPercentRemaining)
                 }
                 if let warning = state.lastError {
                     WarningBanner(text: warning)
@@ -87,14 +88,15 @@ struct DashboardView: View {
 
 struct ProviderCardView: View {
     let snapshot: ProviderSnapshot
+    let showRemaining: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 VStack(spacing: 8) {
-                    BarRow(title: "Daily", window: snapshot.daily, now: context.date)
-                    BarRow(title: "Weekly", window: snapshot.weekly, now: context.date)
+                    BarRow(title: "Daily", window: snapshot.daily, now: context.date, showRemaining: showRemaining)
+                    BarRow(title: "Weekly", window: snapshot.weekly, now: context.date, showRemaining: showRemaining)
                 }
             }
         }
@@ -135,14 +137,18 @@ struct ProviderCardView: View {
         }
     }
 
-    private var worst: Double {
+    private var worstUsed: Double {
         max(snapshot.daily?.usedPercent ?? 0, snapshot.weekly?.usedPercent ?? 0)
     }
 
+    private var badgeValue: Double {
+        showRemaining ? max(0, 100 - worstUsed) : worstUsed
+    }
+
     private var worstBadge: some View {
-        Text("\(Int(worst.rounded()))%")
+        Text("\(Int(badgeValue.rounded()))%")
             .font(.system(size: 14, weight: .bold, design: .rounded).monospacedDigit())
-            .foregroundStyle(UsageColor.forUsedPercent(worst))
+            .foregroundStyle(QBColor.ink)
     }
 
     private func subtitle(now: Date) -> String {
@@ -168,6 +174,7 @@ struct BarRow: View {
     let title: String
     let window: UsageWindow?
     let now: Date
+    let showRemaining: Bool
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -176,7 +183,7 @@ struct BarRow: View {
                 .tracking(0.5)
                 .foregroundStyle(QBColor.ink3)
                 .frame(width: 48, alignment: .leading)
-            BarTrack(window: window, now: now)
+            BarTrack(window: window, now: now, showRemaining: showRemaining)
                 .frame(maxWidth: .infinity)
             PaceMeta(window: window, now: now)
                 .frame(width: 92, alignment: .trailing)
@@ -187,19 +194,22 @@ struct BarRow: View {
 struct BarTrack: View {
     let window: UsageWindow?
     let now: Date
+    let showRemaining: Bool
 
-    private var pct: Double { clamp01(window?.usedPercent ?? 0, hi: 100) }
+    private var usedPct: Double { clamp01(window?.usedPercent ?? 0, hi: 100) }
+    private var displayPct: Double { showRemaining ? 100 - usedPct : usedPct }
     private var expected: Double? {
         guard let window, let pace = UsagePace.compute(window: window, now: now) else { return nil }
-        return pace.expectedPercent
+        let raw = pace.expectedPercent
+        return showRemaining ? max(0, 100 - raw) : raw
     }
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
-            let fillWidth = max(0, w * pct / 100)
+            let fillWidth = max(0, w * displayPct / 100)
             let tickX: CGFloat? = expected.map { max(0, w * $0 / 100) - 1 }
-            let fillColor = window == nil ? QBColor.ink3.opacity(0.35) : UsageColor.forUsedPercent(pct)
+            let fillColor = window == nil ? QBColor.ink3.opacity(0.35) : UsageColor.forUsedPercent(usedPct)
 
             ZStack(alignment: .leading) {
                 // 7px track, vertically centered inside the 13px row
@@ -213,7 +223,7 @@ struct BarTrack: View {
                     Capsule(style: .continuous)
                         .fill(fillColor)
                         .frame(width: fillWidth)
-                        .animation(.easeInOut(duration: 0.55), value: pct)
+                        .animation(.easeInOut(duration: 0.55), value: displayPct)
                 }
                 .frame(height: 7)
                 .clipShape(Capsule(style: .continuous))
@@ -506,9 +516,7 @@ enum UsageColor {
 enum PaceColor {
     static func forStage(_ stage: PaceStage) -> Color {
         switch stage {
-        case .onTrack: QBColor.ink2
-        case .slightReserve: QBColor.ok
-        case .moderateReserve, .deepReserve: Color.mint
+        case .onTrack, .slightReserve, .moderateReserve, .deepReserve: QBColor.ink2
         case .slightDeficit: QBColor.warn
         case .moderateDeficit, .severeDeficit: QBColor.crit
         }
