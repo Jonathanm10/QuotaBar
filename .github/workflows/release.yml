@@ -115,6 +115,23 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP_NAME.app"
           codesign -dvvv "$APP_NAME.app" 2>&1 | grep -E "Authority|TeamIdentifier|Identifier"
 
+      - name: Notarize and staple app bundle
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          APP_ZIP="$RUNNER_TEMP/$APP_NAME.zip"
+          /usr/bin/ditto -c -k --keepParent "$APP_NAME.app" "$APP_ZIP"
+          xcrun notarytool submit "$APP_ZIP" \
+            --key "$ASC_KEY_PATH" \
+            --key-id "$ASC_API_KEY_ID" \
+            --issuer "$ASC_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$APP_NAME.app"
+          xcrun stapler validate "$APP_NAME.app"
+          rm -f "$APP_ZIP"
+
       - name: Create DMG
         env:
           VERSION: ${{ steps.version.outputs.version }}

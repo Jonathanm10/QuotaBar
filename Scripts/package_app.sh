@@ -11,12 +11,12 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 VERSION="${VERSION:-0.0.0-dev}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 
-swift build -c release
+swift build -c release --arch arm64 --arch x86_64
 
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR"
 
-cp "$ROOT_DIR/.build/release/QuotaBar" "$MACOS_DIR/QuotaBar"
+cp "$ROOT_DIR/.build/apple/Products/Release/QuotaBar" "$MACOS_DIR/QuotaBar"
 
 cat > "$CONTENTS_DIR/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
