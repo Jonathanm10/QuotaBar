@@ -77,6 +77,13 @@ swift run QuotaBar
 open QuotaBar.app
 ```
 
+To build the installer image locally as well:
+
+```bash
+./Scripts/create_dmg.sh
+open QuotaBar-0.0.0-dev.dmg
+```
+
 ## Development Notes
 
 - `Daily` is derived locally from the current day's delta in each provider's weekly utilization and resets at local midnight.

@@ -135,21 +135,14 @@ jobs:
       - name: Create DMG
         env:
           VERSION: ${{ steps.version.outputs.version }}
+        run: ./Scripts/create_dmg.sh
+
+      - name: Resolve DMG path
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          DMG="$APP_NAME-$VERSION.dmg"
-          STAGING="$RUNNER_TEMP/dmg-staging"
-          rm -rf "$STAGING"
-          mkdir -p "$STAGING"
-          cp -R "$APP_NAME.app" "$STAGING/"
-          ln -s /Applications "$STAGING/Applications"
-          hdiutil create \
-            -volname "$APP_NAME $VERSION" \
-            -srcfolder "$STAGING" \
-            -ov \
-            -format UDZO \
-            "$DMG"
-          echo "DMG=$DMG" >> "$GITHUB_ENV"
+          echo "DMG=$APP_NAME-$VERSION.dmg" >> "$GITHUB_ENV"
 
       - name: Sign DMG
         run: |
