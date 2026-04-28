@@ -84,6 +84,7 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           BUILD_NUMBER: ${{ github.run_number }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         run: ./Scripts/package_app.sh
 
       - name: Resolve signing identity
@@ -100,6 +101,17 @@ jobs:
       - name: Sign app bundle
         run: |
           set -euo pipefail
+          if [ -d "$APP_NAME.app/Contents/Frameworks" ]; then
+            while IFS= read -r -d '' framework; do
+              codesign \
+                --force \
+                --deep \
+                --options runtime \
+                --timestamp \
+                --sign "$SIGN_IDENTITY" \
+                "$framework"
+            done < <(find "$APP_NAME.app/Contents/Frameworks" -name "*.framework" -type d -print0)
+          fi
           codesign \
             --force \
             --options runtime \
@@ -162,6 +174,13 @@ jobs:
           xcrun stapler staple "$DMG"
           xcrun stapler validate "$DMG"
 
+      - name: Generate Sparkle appcast
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: ./Scripts/generate_appcast.sh
+
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -169,9 +188,9 @@ jobs:
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$DMG" --clobber
+            gh release upload "$TAG" "$DMG" appcast.xml --clobber
           else
-            gh release create "$TAG" "$DMG" \
+            gh release create "$TAG" "$DMG" appcast.xml \
               --title "$TAG" \
               --generate-notes
           fi

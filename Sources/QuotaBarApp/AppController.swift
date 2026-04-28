@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import QuotaBarCore
+import Sparkle
 
 @MainActor
 final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
@@ -13,9 +14,29 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         OpenAIProvider(),
         AnthropicProvider(),
     ])
+    private let updaterController: SPUStandardUpdaterController?
 
     private var refreshTimer: Timer?
     private var popoverMonitor: Any?
+
+    override init() {
+        if Self.hasSparkleConfiguration {
+            self.updaterController = SPUStandardUpdaterController(
+                startingUpdater: true,
+                updaterDelegate: nil,
+                userDriverDelegate: nil
+            )
+        } else {
+            self.updaterController = nil
+        }
+        super.init()
+    }
+
+    private static var hasSparkleConfiguration: Bool {
+        let feedURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String
+        let publicKey = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
+        return feedURL?.isEmpty == false && publicKey?.isEmpty == false
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -154,6 +175,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         menu.addItem(remainingItem)
 
         menu.addItem(.separator())
+        if let updaterController {
+            let checkForUpdatesItem = NSMenuItem(
+                title: "Check for Updates...",
+                action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+                keyEquivalent: ""
+            )
+            checkForUpdatesItem.target = updaterController
+            checkForUpdatesItem.isEnabled = updaterController.updater.canCheckForUpdates
+            menu.addItem(checkForUpdatesItem)
+        }
+
         let quitItem = NSMenuItem(title: "Quit QuotaBar", action: #selector(self.handleQuit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
@@ -189,20 +221,38 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         self.state.isRefreshing = true
         defer { self.state.isRefreshing = false }
 
-        let fresh = await self.refreshCoordinator.refreshAll(trigger: trigger)
-        guard !fresh.isEmpty else { return }
-        for snapshot in fresh {
+        let report = await self.refreshCoordinator.refreshAll(trigger: trigger)
+        for failure in report.failures {
+            if let cached = self.state.snapshots[failure.provider] {
+                self.state.apply(cached.markingRefreshFailure(failure))
+            }
+        }
+
+        guard !report.snapshots.isEmpty || !report.failures.isEmpty else { return }
+        for snapshot in report.snapshots {
             self.state.apply(snapshot)
         }
-        self.state.lastRefreshAt = Date()
-        self.state.lastError = nil
+        if !report.snapshots.isEmpty {
+            self.state.lastRefreshAt = Date()
+        }
+        self.state.lastError = self.errorSummary(for: report.failures)
         let snapshots = self.state.orderedSnapshots
-        do {
-            try await self.snapshotStore.save(snapshots)
-        } catch {
-            AppLog.cache.error("Failed to save cache")
+        if !report.snapshots.isEmpty {
+            do {
+                try await self.snapshotStore.save(snapshots)
+            } catch {
+                AppLog.cache.error("Failed to save cache")
+            }
         }
         self.updateStatusBar()
+    }
+
+    private func errorSummary(for failures: [ProviderRefreshFailure]) -> String? {
+        guard !failures.isEmpty else { return nil }
+        let details = failures
+            .map { "\($0.provider.displayName) refresh failed: \($0.message)" }
+            .joined(separator: "\n")
+        return "\(details)\nShowing cached values."
     }
 
     private func asCachedSnapshot(_ snapshot: ProviderSnapshot) -> ProviderSnapshot {

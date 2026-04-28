@@ -50,6 +50,64 @@ func openAIUsageDecodesWindowsAndCredits() throws {
 }
 
 @Test
+func openAIUsageDecodesZeroAndFractionalPercents() throws {
+    let json = """
+    {
+      "rate_limit": {
+        "primary_window": {
+          "used_percent": 0.0,
+          "limit_window_seconds": 18000,
+          "reset_at": 1776440459
+        },
+        "secondary_window": {
+          "used_percent": 0.5,
+          "limit_window_seconds": 604800,
+          "reset_at": 1777009247
+        }
+      }
+    }
+    """
+
+    let decoded = try JSONDecoder().decode(OpenAIUsageResponse.self, from: Data(json.utf8))
+    #expect(decoded.rateLimit?.primaryWindow?.usedPercent == 0)
+    #expect(decoded.rateLimit?.secondaryWindow?.usedPercent == 0.5)
+}
+
+@Test
+func openAIRefreshFailureDescriptionIncludesServerBody() {
+    let error = OpenAIProviderError.refreshFailed(
+        statusCode: 400,
+        body: #"{"error":"invalid_grant","error_description":"Refresh token expired"}"#
+    )
+
+    #expect(error.localizedDescription.contains("HTTP 400"))
+    #expect(error.localizedDescription.contains("invalid_grant"))
+    #expect(error.localizedDescription.contains("Refresh token expired"))
+}
+
+@Test
+func openAIRefreshDecodeFailureDescriptionIncludesBody() {
+    let error = OpenAIProviderError.refreshDecodeFailed(
+        reason: "missing access_token",
+        body: #"{"unexpected":true}"#
+    )
+
+    #expect(error.localizedDescription.contains("missing access_token"))
+    #expect(error.localizedDescription.contains(#""unexpected":true"#))
+}
+
+@Test
+func openAIUsageFailureDescriptionIncludesServerBody() {
+    let error = OpenAIProviderError.httpError(
+        statusCode: 403,
+        body: #"{"detail":"account header required"}"#
+    )
+
+    #expect(error.localizedDescription.contains("HTTP 403"))
+    #expect(error.localizedDescription.contains("account header required"))
+}
+
+@Test
 func anthropicUsageDecodesWindows() throws {
     let json = """
     {
@@ -120,6 +178,59 @@ func refreshPolicyFailureBackoffRespectsFiveMinuteFloor() async {
 }
 
 @Test
+func refreshPolicyMenuOpenBypassesSuccessThrottle() async {
+    let policy = RefreshPolicy()
+    let now = Date(timeIntervalSince1970: 4_000_000)
+    await policy.recordSuccess(provider: .openAI, now: now)
+
+    #expect(await policy.shouldRefresh(provider: .openAI, now: now.addingTimeInterval(10), trigger: .timer) == false)
+    #expect(await policy.shouldRefresh(provider: .openAI, now: now.addingTimeInterval(10), trigger: .menuOpen) == true)
+}
+
+@Test
+func refreshCoordinatorReportsProviderFailureBesideSuccess() async {
+    let now = Date(timeIntervalSince1970: 5_000_000)
+    let anthropicSnapshot = ProviderSnapshot(
+        provider: .anthropic,
+        daily: nil,
+        weekly: UsageWindow(label: "7d", usedPercent: 1, sourceWindowMinutes: 10_080, resetsAt: nil, source: .oauth),
+        reserve: nil,
+        source: "oauth",
+        fetchedAt: now
+    )
+    let coordinator = RefreshCoordinator(providers: [
+        StubProvider(providerID: .openAI) { _ in throw StubProviderError.refreshFailed },
+        StubProvider(providerID: .anthropic) { _ in anthropicSnapshot },
+    ])
+
+    let report = await coordinator.refreshAll(trigger: .manual, now: now)
+
+    #expect(report.snapshots == [anthropicSnapshot])
+    #expect(report.failures == [
+        ProviderRefreshFailure(provider: .openAI, message: "token refresh unavailable"),
+    ])
+}
+
+@Test
+func cachedSnapshotMarkedAfterRefreshFailureKeepsCacheProvenance() {
+    let cached = ProviderSnapshot(
+        provider: .openAI,
+        daily: nil,
+        weekly: UsageWindow(label: "7d", usedPercent: 25, sourceWindowMinutes: 10_080, resetsAt: nil, source: .cache),
+        reserve: nil,
+        source: "cache",
+        fetchedAt: Date(timeIntervalSince1970: 6_000_000)
+    )
+    let marked = cached.markingRefreshFailure(
+        ProviderRefreshFailure(provider: .openAI, message: "token refresh unavailable")
+    )
+
+    #expect(marked.weekly?.usedPercent == 25)
+    #expect(marked.source == "cache")
+    #expect(marked.warning == "OpenAI refresh failed: token refresh unavailable")
+}
+
+@Test
 func usagePaceReturnsOnTrackWhenHalfway() {
     let now = Date(timeIntervalSince1970: 1_000_000)
     let resetsAt = now.addingTimeInterval(2.5 * 60 * 60)
@@ -187,4 +298,26 @@ func shortDurationFormatsSensibly() {
     #expect(Formatting.shortDuration(3 * 60 * 60) == "3h")
     #expect(Formatting.shortDuration(3 * 60 * 60 + 30 * 60) == "3h30m")
     #expect(Formatting.shortDuration(3 * 24 * 60 * 60) == "3d")
+}
+
+private struct StubProvider: UsageProvider {
+    let providerID: ProviderID
+    let fetch: @Sendable (Date) async throws -> ProviderSnapshot
+
+    init(providerID: ProviderID, fetch: @escaping @Sendable (Date) async throws -> ProviderSnapshot) {
+        self.providerID = providerID
+        self.fetch = fetch
+    }
+
+    func fetchSnapshot(now: Date) async throws -> ProviderSnapshot {
+        try await fetch(now)
+    }
+}
+
+private enum StubProviderError: LocalizedError, Sendable {
+    case refreshFailed
+
+    var errorDescription: String? {
+        "token refresh unavailable"
+    }
 }
