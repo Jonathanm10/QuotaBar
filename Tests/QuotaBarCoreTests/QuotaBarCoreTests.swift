@@ -50,6 +50,30 @@ func openAIUsageDecodesWindowsAndCredits() throws {
 }
 
 @Test
+func openAIUsageDecodesZeroAndFractionalPercents() throws {
+    let json = """
+    {
+      "rate_limit": {
+        "primary_window": {
+          "used_percent": 0.0,
+          "limit_window_seconds": 18000,
+          "reset_at": 1776440459
+        },
+        "secondary_window": {
+          "used_percent": 0.5,
+          "limit_window_seconds": 604800,
+          "reset_at": 1777009247
+        }
+      }
+    }
+    """
+
+    let decoded = try JSONDecoder().decode(OpenAIUsageResponse.self, from: Data(json.utf8))
+    #expect(decoded.rateLimit?.primaryWindow?.usedPercent == 0)
+    #expect(decoded.rateLimit?.secondaryWindow?.usedPercent == 0.5)
+}
+
+@Test
 func anthropicUsageDecodesWindows() throws {
     let json = """
     {
@@ -117,6 +141,16 @@ func refreshPolicyFailureBackoffRespectsFiveMinuteFloor() async {
     await policy.recordFailure(provider: .openAI, now: now)
     #expect(await policy.shouldRefresh(provider: .openAI, now: now.addingTimeInterval(299), trigger: .timer) == false)
     #expect(await policy.shouldRefresh(provider: .openAI, now: now.addingTimeInterval(318), trigger: .timer) == true)
+}
+
+@Test
+func refreshPolicyMenuOpenBypassesSuccessThrottle() async {
+    let policy = RefreshPolicy()
+    let now = Date(timeIntervalSince1970: 4_000_000)
+    await policy.recordSuccess(provider: .openAI, now: now)
+
+    #expect(await policy.shouldRefresh(provider: .openAI, now: now.addingTimeInterval(10), trigger: .timer) == false)
+    #expect(await policy.shouldRefresh(provider: .openAI, now: now.addingTimeInterval(10), trigger: .menuOpen) == true)
 }
 
 @Test
