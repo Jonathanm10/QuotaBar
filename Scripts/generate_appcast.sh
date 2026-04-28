@@ -10,7 +10,7 @@ TAG="${TAG:-v${VERSION}}"
 DMG="${DMG:-$ROOT_DIR/${APP_NAME}-${VERSION}.dmg}"
 SPARKLE_PRIVATE_ED_KEY="${SPARKLE_PRIVATE_ED_KEY:-}"
 GENERATE_APPCAST="${GENERATE_APPCAST:-$ROOT_DIR/.build/artifacts/sparkle/Sparkle/bin/generate_appcast}"
-DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://github.com/Jonathanm10/QuotaBar/releases/download/${TAG}}"
+DOWNLOAD_URL_PREFIX="${DOWNLOAD_URL_PREFIX:-https://github.com/Jonathanm10/QuotaBar/releases/download/${TAG}/}"
 PRODUCT_LINK="${PRODUCT_LINK:-https://github.com/Jonathanm10/QuotaBar}"
 OUTPUT_APPCAST="${OUTPUT_APPCAST:-$ROOT_DIR/appcast.xml}"
 
