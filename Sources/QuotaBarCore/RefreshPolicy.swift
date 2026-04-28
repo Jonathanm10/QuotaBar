@@ -18,7 +18,7 @@ public actor RefreshPolicy {
     public init() {}
 
     public func shouldRefresh(provider: ProviderID, now: Date, trigger: RefreshTrigger) -> Bool {
-        guard trigger != .manual else { return true }
+        guard trigger != .manual, trigger != .menuOpen else { return true }
         guard let state = self.state[provider] else { return true }
         return now >= state.nextAllowedRefreshAt
     }

@@ -259,7 +259,7 @@ public struct OpenAIUsageResponse: Codable, Sendable {
         public let secondaryWindow: Window?
 
         public struct Window: Codable, Sendable {
-            public let usedPercent: Int
+            public let usedPercent: Double
             public let limitWindowSeconds: Int
             public let resetAt: Int
 

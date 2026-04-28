@@ -105,6 +105,18 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         self.fetchedAt = fetchedAt
         self.warning = warning
     }
+
+    public func markingRefreshFailure(_ failure: ProviderRefreshFailure) -> ProviderSnapshot {
+        ProviderSnapshot(
+            provider: provider,
+            daily: daily,
+            weekly: weekly,
+            reserve: reserve,
+            source: source,
+            fetchedAt: fetchedAt,
+            warning: "\(provider.displayName) refresh failed: \(failure.message)"
+        )
+    }
 }
 
 public struct SnapshotEnvelope: Codable, Equatable, Sendable {
