@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import QuotaBarCore
+import Sparkle
 
 @MainActor
 final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
@@ -13,9 +14,29 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         OpenAIProvider(),
         AnthropicProvider(),
     ])
+    private let updaterController: SPUStandardUpdaterController?
 
     private var refreshTimer: Timer?
     private var popoverMonitor: Any?
+
+    override init() {
+        if Self.hasSparkleConfiguration {
+            self.updaterController = SPUStandardUpdaterController(
+                startingUpdater: true,
+                updaterDelegate: nil,
+                userDriverDelegate: nil
+            )
+        } else {
+            self.updaterController = nil
+        }
+        super.init()
+    }
+
+    private static var hasSparkleConfiguration: Bool {
+        let feedURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String
+        let publicKey = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
+        return feedURL?.isEmpty == false && publicKey?.isEmpty == false
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -154,6 +175,17 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         menu.addItem(remainingItem)
 
         menu.addItem(.separator())
+        if let updaterController {
+            let checkForUpdatesItem = NSMenuItem(
+                title: "Check for Updates...",
+                action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)),
+                keyEquivalent: ""
+            )
+            checkForUpdatesItem.target = updaterController
+            checkForUpdatesItem.isEnabled = updaterController.updater.canCheckForUpdates
+            menu.addItem(checkForUpdatesItem)
+        }
+
         let quitItem = NSMenuItem(title: "Quit QuotaBar", action: #selector(self.handleQuit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)

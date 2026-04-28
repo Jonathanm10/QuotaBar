@@ -34,6 +34,17 @@ Download the latest signed and notarized DMG from the [Releases page](https://gi
 
 Releases are cut from `v*` git tags — pushing `vX.Y.Z` triggers the release workflow, which signs with Developer ID, notarizes via App Store Connect API key, staples, and uploads the DMG.
 
+## Updates
+
+QuotaBar uses Sparkle for in-app update checks. Release builds embed a Sparkle appcast URL pointing at the latest GitHub Release asset, so users are notified by Sparkle when a newer signed DMG is available.
+
+Maintainers need two GitHub Actions secrets for release builds:
+
+- `SPARKLE_PUBLIC_ED_KEY`: the public EdDSA key printed by Sparkle's `generate_keys` tool
+- `SPARKLE_PRIVATE_ED_KEY`: the exported private EdDSA key used by `generate_appcast`
+
+Generate the key pair once with Sparkle's tools using the `quotabar` Keychain account, keep the private key out of the repo, and export it only into the release secret.
+
 ## Status
 
 QuotaBar is early-stage but usable. The codebase is small, the tests are fast, and the project is open to focused contributions that keep the app lean.

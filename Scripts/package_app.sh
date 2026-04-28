@@ -14,6 +14,28 @@ BUILD_DIR="$ROOT_DIR/.build/apple/Products/Release"
 ARTIFACTS_DIR="$ROOT_DIR/.build/release-art"
 VERSION="${VERSION:-0.0.0-dev}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://github.com/Jonathanm10/QuotaBar/releases/latest/download/appcast.xml}"
+SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
+
+if [[ -n "${CI:-}" && "$VERSION" != "0.0.0-dev" && -z "$SPARKLE_PUBLIC_ED_KEY" ]]; then
+  echo "SPARKLE_PUBLIC_ED_KEY is required for CI release builds" >&2
+  exit 1
+fi
+
+SPARKLE_INFO_PLIST_KEYS=""
+if [[ -n "$SPARKLE_PUBLIC_ED_KEY" ]]; then
+  SPARKLE_INFO_PLIST_KEYS="$(cat <<EOF
+  <key>SUFeedURL</key>
+  <string>${SPARKLE_FEED_URL}</string>
+  <key>SUPublicEDKey</key>
+  <string>${SPARKLE_PUBLIC_ED_KEY}</string>
+  <key>SUEnableAutomaticChecks</key>
+  <true/>
+  <key>SUAutomaticallyUpdate</key>
+  <false/>
+EOF
+)"
+fi
 
 swift build -c release --arch arm64 --arch x86_64
 
@@ -34,6 +56,10 @@ cp -R "$RESOURCE_BUNDLE" "$RESOURCES_DIR/"
 
 if [[ -f "$ARTIFACTS_DIR/QuotaBar.icns" ]]; then
   cp "$ARTIFACTS_DIR/QuotaBar.icns" "$RESOURCES_DIR/QuotaBar.icns"
+fi
+
+if [[ -d "$BUILD_DIR/Frameworks" ]] && find "$BUILD_DIR/Frameworks" -mindepth 1 -print -quit >/dev/null; then
+  cp -R "$BUILD_DIR/Frameworks/." "$FRAMEWORKS_DIR/"
 fi
 
 if [[ -d "$BUILD_DIR/PackageFrameworks" ]] && find "$BUILD_DIR/PackageFrameworks" -mindepth 1 -print -quit >/dev/null; then
@@ -75,6 +101,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<EOF
   <true/>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+${SPARKLE_INFO_PLIST_KEYS}
 </dict>
 </plist>
 EOF
