@@ -11,17 +11,25 @@ public struct OpenAIProvider: UsageProvider {
     public func fetchSnapshot(now: Date) async throws -> ProviderSnapshot {
         var credentials = try OpenAICredentialsStore.load()
         if credentials.shouldRefreshProactively {
-            credentials = try await OpenAICredentialsStore.refresh(credentials)
-            try OpenAICredentialsStore.saveRefreshed(credentials)
+            credentials = try await Self.refreshOrRecoverFromCodexAuthFile(credentials)
         }
 
         do {
             return try await Self.fetchSnapshot(credentials: credentials, now: now)
         } catch let error as OpenAIProviderError where error.isUnauthorized {
             guard credentials.refreshToken?.isEmpty == false else { throw error }
+            let refreshed = try await Self.refreshOrRecoverFromCodexAuthFile(credentials)
+            return try await Self.fetchSnapshot(credentials: refreshed, now: now)
+        }
+    }
+
+    private static func refreshOrRecoverFromCodexAuthFile(_ credentials: OpenAICredentials) async throws -> OpenAICredentials {
+        do {
             let refreshed = try await OpenAICredentialsStore.refresh(credentials)
             try OpenAICredentialsStore.saveRefreshed(refreshed)
-            return try await Self.fetchSnapshot(credentials: refreshed, now: now)
+            return refreshed
+        } catch {
+            return try OpenAICredentialsStore.recoverFromCodexAuthFile(after: error, staleCredentials: credentials)
         }
     }
 
@@ -79,10 +87,31 @@ public enum OpenAICredentialsStore {
     private static let keychainService = "QuotaBar.OpenAIOAuth"
 
     public static func load() throws -> OpenAICredentials {
-        if let keychainCredentials = try self.loadFromKeychain() {
-            return keychainCredentials
+        do {
+            if let keychainCredentials = try self.loadFromKeychain() {
+                return keychainCredentials
+            }
+        } catch {
+            AppLog.provider.error("OpenAI QuotaBar keychain credentials were unusable; falling back to Codex auth file: \(error.localizedDescription, privacy: .public)")
         }
 
+        return try self.loadFromCodexAuthFile()
+    }
+
+    public static func recoverFromCodexAuthFile(after refreshError: any Error, staleCredentials: OpenAICredentials) throws -> OpenAICredentials {
+        let codexCredentials = try self.loadFromCodexAuthFile()
+        guard !self.hasSameTokenSet(codexCredentials, staleCredentials) else {
+            throw refreshError
+        }
+        do {
+            try self.saveRefreshed(codexCredentials)
+        } catch {
+            AppLog.provider.error("OpenAI Codex auth recovery could not update QuotaBar keychain: \(error.localizedDescription, privacy: .public)")
+        }
+        return codexCredentials
+    }
+
+    static func loadFromCodexAuthFile() throws -> OpenAICredentials {
         let data = try Data(contentsOf: authPath)
         let decoded = try JSONDecoder.iso8601.decode(OpenAIAuthFile.self, from: data)
 
@@ -102,6 +131,13 @@ public enum OpenAICredentialsStore {
             idToken: tokens.idToken?.trimmed,
             lastRefresh: decoded.lastRefresh
         )
+    }
+
+    private static func hasSameTokenSet(_ lhs: OpenAICredentials, _ rhs: OpenAICredentials) -> Bool {
+        lhs.accessToken == rhs.accessToken
+            && lhs.refreshToken == rhs.refreshToken
+            && lhs.accountID == rhs.accountID
+            && lhs.idToken == rhs.idToken
     }
 
     public static func saveRefreshed(_ credentials: OpenAICredentials) throws {
@@ -149,11 +185,25 @@ public enum OpenAICredentialsStore {
         request.httpBody = try JSONEncoder().encode(body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw OpenAIProviderError.refreshFailed
+        guard let http = response as? HTTPURLResponse else {
+            throw OpenAIProviderError.invalidResponse
+        }
+        guard http.statusCode == 200 else {
+            throw OpenAIProviderError.refreshFailed(
+                statusCode: http.statusCode,
+                body: openAIResponseBodySnippet(data)
+            )
         }
 
-        let refreshed = try JSONDecoder().decode(RefreshResponse.self, from: data)
+        let refreshed: RefreshResponse
+        do {
+            refreshed = try JSONDecoder().decode(RefreshResponse.self, from: data)
+        } catch {
+            throw OpenAIProviderError.refreshDecodeFailed(
+                reason: error.localizedDescription,
+                body: openAIResponseBodySnippet(data)
+            )
+        }
         return OpenAICredentials(
             accessToken: refreshed.accessToken,
             refreshToken: refreshed.refreshToken ?? credentials.refreshToken,
@@ -209,44 +259,95 @@ public enum OpenAIUsageFetcher {
             throw OpenAIProviderError.invalidResponse
         }
         guard http.statusCode != 401 else {
-            throw OpenAIProviderError.unauthorized
+            throw OpenAIProviderError.unauthorized(body: openAIResponseBodySnippet(data))
         }
         guard 200 ..< 300 ~= http.statusCode else {
-            throw OpenAIProviderError.httpError(http.statusCode)
+            throw OpenAIProviderError.httpError(
+                statusCode: http.statusCode,
+                body: openAIResponseBodySnippet(data)
+            )
         }
 
-        let decoded = try JSONDecoder().decode(OpenAIUsageResponse.self, from: data)
-        return decoded
+        do {
+            return try JSONDecoder().decode(OpenAIUsageResponse.self, from: data)
+        } catch {
+            throw OpenAIProviderError.usageDecodeFailed(
+                reason: error.localizedDescription,
+                body: openAIResponseBodySnippet(data)
+            )
+        }
     }
 }
 
 public enum OpenAIProviderError: LocalizedError {
     case credentialsMissing
     case apiKeyUnsupported
-    case refreshFailed
+    case refreshFailed(statusCode: Int, body: String)
+    case refreshDecodeFailed(reason: String, body: String)
+    case usageDecodeFailed(reason: String, body: String)
     case invalidResponse
-    case unauthorized
-    case httpError(Int)
+    case unauthorized(body: String)
+    case httpError(statusCode: Int, body: String)
     case keychainReadFailed(OSStatus)
     case keychainWriteFailed(OSStatus)
 
     public var isUnauthorized: Bool {
-        if case .unauthorized = self { return true }
-        return false
+        switch self {
+        case .unauthorized: true
+        default: false
+        }
     }
 
     public var errorDescription: String? {
         switch self {
         case .credentialsMissing: "OpenAI credentials missing. Run codex login."
         case .apiKeyUnsupported: "OPENAI_API_KEY auth is not supported for ChatGPT usage polling; use codex OAuth login."
-        case .refreshFailed: "OpenAI token refresh failed."
+        case let .refreshFailed(statusCode, body):
+            if body.isEmpty {
+                "OpenAI token refresh failed with HTTP \(statusCode)."
+            } else {
+                "OpenAI token refresh failed with HTTP \(statusCode): \(body)"
+            }
+        case let .refreshDecodeFailed(reason, body):
+            if body.isEmpty {
+                "OpenAI token refresh response could not be decoded: \(reason)"
+            } else {
+                "OpenAI token refresh response could not be decoded: \(reason). Body: \(body)"
+            }
+        case let .usageDecodeFailed(reason, body):
+            if body.isEmpty {
+                "OpenAI usage response could not be decoded: \(reason)"
+            } else {
+                "OpenAI usage response could not be decoded: \(reason). Body: \(body)"
+            }
         case .invalidResponse: "OpenAI usage response was invalid."
-        case .unauthorized: "OpenAI usage request was unauthorized."
-        case let .httpError(code): "OpenAI usage request failed with HTTP \(code)."
+        case let .unauthorized(body):
+            if body.isEmpty {
+                "OpenAI usage request was unauthorized."
+            } else {
+                "OpenAI usage request was unauthorized: \(body)"
+            }
+        case let .httpError(statusCode, body):
+            if body.isEmpty {
+                "OpenAI usage request failed with HTTP \(statusCode)."
+            } else {
+                "OpenAI usage request failed with HTTP \(statusCode): \(body)"
+            }
         case let .keychainReadFailed(status): "OpenAI keychain read failed with OSStatus \(status)."
         case let .keychainWriteFailed(status): "OpenAI keychain write failed with OSStatus \(status)."
         }
     }
+}
+
+private func openAIResponseBodySnippet(_ data: Data) -> String {
+    guard !data.isEmpty else { return "" }
+    let raw = String(data: data, encoding: .utf8) ?? data.base64EncodedString()
+    let singleLine = raw
+        .replacingOccurrences(of: "\n", with: " ")
+        .replacingOccurrences(of: "\r", with: " ")
+        .trimmed
+    guard singleLine.count > 1_000 else { return singleLine }
+    return "\(singleLine.prefix(1_000))..."
 }
 
 public struct OpenAIUsageResponse: Codable, Sendable {
@@ -259,7 +360,7 @@ public struct OpenAIUsageResponse: Codable, Sendable {
         public let secondaryWindow: Window?
 
         public struct Window: Codable, Sendable {
-            public let usedPercent: Int
+            public let usedPercent: Double
             public let limitWindowSeconds: Int
             public let resetAt: Int
 
