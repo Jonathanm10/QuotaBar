@@ -97,6 +97,9 @@ struct ProviderCardView: View {
                 VStack(spacing: 8) {
                     BarRow(title: "Daily", window: snapshot.daily, now: context.date, showRemaining: showRemaining)
                     BarRow(title: "Weekly", window: snapshot.weekly, now: context.date, showRemaining: showRemaining)
+                    if let warning = snapshot.warning {
+                        WarningBanner(text: warning)
+                    }
                 }
             }
         }
