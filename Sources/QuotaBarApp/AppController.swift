@@ -217,8 +217,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func errorSummary(for failures: [ProviderRefreshFailure]) -> String? {
         guard !failures.isEmpty else { return nil }
-        let names = failures.map { $0.provider.displayName }.joined(separator: ", ")
-        return "\(names) refresh failed. Showing cached values."
+        let details = failures
+            .map { "\($0.provider.displayName) refresh failed: \($0.message)" }
+            .joined(separator: "\n")
+        return "\(details)\nShowing cached values."
     }
 
     private func asCachedSnapshot(_ snapshot: ProviderSnapshot) -> ProviderSnapshot {

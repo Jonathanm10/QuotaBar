@@ -74,6 +74,40 @@ func openAIUsageDecodesZeroAndFractionalPercents() throws {
 }
 
 @Test
+func openAIRefreshFailureDescriptionIncludesServerBody() {
+    let error = OpenAIProviderError.refreshFailed(
+        statusCode: 400,
+        body: #"{"error":"invalid_grant","error_description":"Refresh token expired"}"#
+    )
+
+    #expect(error.localizedDescription.contains("HTTP 400"))
+    #expect(error.localizedDescription.contains("invalid_grant"))
+    #expect(error.localizedDescription.contains("Refresh token expired"))
+}
+
+@Test
+func openAIRefreshDecodeFailureDescriptionIncludesBody() {
+    let error = OpenAIProviderError.refreshDecodeFailed(
+        reason: "missing access_token",
+        body: #"{"unexpected":true}"#
+    )
+
+    #expect(error.localizedDescription.contains("missing access_token"))
+    #expect(error.localizedDescription.contains(#""unexpected":true"#))
+}
+
+@Test
+func openAIUsageFailureDescriptionIncludesServerBody() {
+    let error = OpenAIProviderError.httpError(
+        statusCode: 403,
+        body: #"{"detail":"account header required"}"#
+    )
+
+    #expect(error.localizedDescription.contains("HTTP 403"))
+    #expect(error.localizedDescription.contains("account header required"))
+}
+
+@Test
 func anthropicUsageDecodesWindows() throws {
     let json = """
     {

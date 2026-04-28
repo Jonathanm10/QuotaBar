@@ -50,7 +50,7 @@ struct DashboardView: View {
     @ViewBuilder
     private var content: some View {
         if state.orderedSnapshots.isEmpty {
-            EmptyStateView(isRefreshing: state.isRefreshing)
+            EmptyStateView(isRefreshing: state.isRefreshing, error: state.lastError)
         } else {
             VStack(spacing: 10) {
                 ForEach(state.orderedSnapshots, id: \.provider) { snapshot in
@@ -461,11 +461,13 @@ struct WarningBanner: View {
             .font(.caption)
             .foregroundStyle(QBColor.warn)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }
 
 struct EmptyStateView: View {
     let isRefreshing: Bool
+    let error: String?
 
     var body: some View {
         VStack(spacing: 8) {
@@ -478,8 +480,13 @@ struct EmptyStateView: View {
             Text(isRefreshing ? "Fetching first snapshot…" : "Waiting for initial refresh.")
                 .font(.system(size: 11))
                 .foregroundStyle(QBColor.ink3)
+            if let error {
+                WarningBanner(text: error)
+                    .padding(.top, 6)
+            }
         }
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, 12)
         .padding(.vertical, 44)
     }
 }
