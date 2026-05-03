@@ -62,7 +62,7 @@ This project is not affiliated with, endorsed by, or maintained by OpenAI or Ant
 QuotaBar does not ask contributors to provision new app credentials.
 
 - OpenAI usage is read from an existing local Codex/OpenAI OAuth session, currently sourced from `~/.codex/auth.json` and refreshed into the macOS keychain.
-- Anthropic usage is read from the macOS keychain entry used by Claude Code.
+- Anthropic usage is bootstrapped from the macOS keychain entry used by Claude Code, then cached under QuotaBar's own keychain service to avoid repeatedly prompting for `Claude Code-credentials`.
 - API key-only flows are intentionally out of scope for now.
 
 If those local sessions do not exist, the app can still build and tests will still pass, but live refreshes will fail until valid local credentials are present.
@@ -86,6 +86,14 @@ swift run QuotaBar
 ```bash
 ./Scripts/package_app.sh
 open QuotaBar.app
+```
+
+For local builds that need durable Keychain approval, create and trust a stable development signing identity:
+
+```bash
+./Scripts/setup_dev_signing.sh
+export APP_IDENTITY='QuotaBar Development'
+./Scripts/package_app.sh
 ```
 
 To build the installer image locally as well:

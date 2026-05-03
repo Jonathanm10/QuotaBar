@@ -5,7 +5,6 @@ import Security
 
 public struct AnthropicProvider: UsageProvider {
     public let providerID: ProviderID = .anthropic
-    private static let keychainService = "Claude Code-credentials"
     private static let usageEndpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private static let refreshEndpoint = URL(string: "https://platform.claude.com/v1/oauth/token")!
     private static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
@@ -13,25 +12,19 @@ public struct AnthropicProvider: UsageProvider {
     public init() {}
 
     public func fetchSnapshot(now: Date) async throws -> ProviderSnapshot {
-        var credentials = try Self.loadCredentials()
+        var credentials = try AnthropicCredentialsStore.load()
         if credentials.isExpired {
             credentials = try await Self.refresh(credentials)
-            try Self.saveCredentials(credentials)
+            try AnthropicCredentialsStore.save(credentials)
         }
 
         do {
             return try await Self.fetchSnapshot(credentials: credentials, now: now)
         } catch let error as AnthropicProviderError where error.isUnauthorized {
             credentials = try await Self.refresh(credentials)
-            try Self.saveCredentials(credentials)
+            try AnthropicCredentialsStore.save(credentials)
             return try await Self.fetchSnapshot(credentials: credentials, now: now)
         }
-    }
-
-    private static func loadCredentials() throws -> ClaudeOAuthCredentials {
-        let output = try runSecurityCommand(arguments: ["find-generic-password", "-s", keychainService, "-w"])
-        let decoded = try JSONDecoder().decode(ClaudeCredentialEnvelope.self, from: output)
-        return decoded.claudeAiOauth
     }
 
     private static func refresh(_ credentials: ClaudeOAuthCredentials) async throws -> ClaudeOAuthCredentials {
@@ -68,37 +61,6 @@ public struct AnthropicProvider: UsageProvider {
             scopes: refreshed.scopes ?? credentials.scopes,
             rateLimitTier: refreshed.rateLimitTier ?? credentials.rateLimitTier
         )
-    }
-
-    private static func saveCredentials(_ credentials: ClaudeOAuthCredentials) throws {
-        let payload = ClaudeCredentialEnvelope(claudeAiOauth: credentials)
-        let data = try JSONEncoder().encode(payload)
-        #if os(macOS)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-        ]
-        let attributes: [String: Any] = [
-            kSecValueData as String: data,
-        ]
-
-        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if updateStatus == errSecSuccess {
-            return
-        }
-        if updateStatus != errSecItemNotFound {
-            throw AnthropicProviderError.keychainWriteFailed("OSStatus \(updateStatus)")
-        }
-
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        guard addStatus == errSecSuccess else {
-            throw AnthropicProviderError.keychainWriteFailed("OSStatus \(addStatus)")
-        }
-        #else
-        throw AnthropicProviderError.keychainWriteFailed("Keychain writes require macOS Security.framework.")
-        #endif
     }
 
     private static func fetchSnapshot(credentials: ClaudeOAuthCredentials, now: Date) async throws -> ProviderSnapshot {
@@ -154,26 +116,109 @@ public struct AnthropicProvider: UsageProvider {
             fetchedAt: now
         )
     }
+}
 
-    private static func runSecurityCommand(arguments: [String]) throws -> Data {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = arguments
+public enum AnthropicCredentialsStore {
+    private static let appCacheService = "QuotaBar.AnthropicOAuth"
+    private static let appCacheAccount = "oauth.anthropic"
+    private static let claudeCodeKeychainService = "Claude Code-credentials"
 
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            let error = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "unknown error"
-            throw AnthropicProviderError.keychainReadFailed(error)
+    public static func load() throws -> ClaudeOAuthCredentials {
+        do {
+            if let cached = try self.loadFromAppCache() {
+                return cached
+            }
+        } catch {
+            AppLog.provider.error("Anthropic QuotaBar keychain cache was unusable; falling back to Claude Code keychain: \(error.localizedDescription, privacy: .public)")
         }
 
-        return stdout.fileHandleForReading.readDataToEndOfFile()
+        let credentials = try self.loadFromClaudeCodeKeychain()
+        do {
+            try self.save(credentials)
+        } catch {
+            AppLog.provider.error("Anthropic Claude Code keychain bootstrap could not update QuotaBar cache: \(error.localizedDescription, privacy: .public)")
+        }
+        return credentials
+    }
+
+    public static func save(_ credentials: ClaudeOAuthCredentials) throws {
+        #if os(macOS)
+        let data = try JSONEncoder().encode(credentials)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: self.appCacheService,
+            kSecAttrAccount as String: self.appCacheAccount,
+        ]
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+        ]
+
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
+        }
+        if updateStatus != errSecItemNotFound {
+            throw AnthropicProviderError.keychainWriteFailed("QuotaBar cache OSStatus \(updateStatus)")
+        }
+
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw AnthropicProviderError.keychainWriteFailed("QuotaBar cache OSStatus \(addStatus)")
+        }
+        #else
+        throw AnthropicProviderError.keychainWriteFailed("Keychain writes require macOS Security.framework.")
+        #endif
+    }
+
+    private static func loadFromAppCache() throws -> ClaudeOAuthCredentials? {
+        #if os(macOS)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: self.appCacheService,
+            kSecAttrAccount as String: self.appCacheAccount,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: true,
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        switch status {
+        case errSecSuccess:
+            guard let data = result as? Data else { return nil }
+            return try JSONDecoder().decode(ClaudeOAuthCredentials.self, from: data)
+        case errSecItemNotFound:
+            return nil
+        default:
+            throw AnthropicProviderError.keychainReadFailed("QuotaBar cache OSStatus \(status)")
+        }
+        #else
+        return nil
+        #endif
+    }
+
+    private static func loadFromClaudeCodeKeychain() throws -> ClaudeOAuthCredentials {
+        #if os(macOS)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: self.claudeCodeKeychainService,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: true,
+        ]
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess else {
+            throw AnthropicProviderError.keychainReadFailed("Claude Code keychain OSStatus \(status)")
+        }
+        guard let data = result as? Data else {
+            throw AnthropicProviderError.keychainReadFailed("Claude Code keychain returned no data.")
+        }
+        let decoded = try JSONDecoder().decode(ClaudeCredentialEnvelope.self, from: data)
+        return decoded.claudeAiOauth
+        #else
+        throw AnthropicProviderError.keychainReadFailed("Claude Code keychain reads require macOS Security.framework.")
+        #endif
     }
 }
 

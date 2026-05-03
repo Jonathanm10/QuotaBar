@@ -16,6 +16,7 @@ VERSION="${VERSION:-0.0.0-dev}"
 BUILD_NUMBER="${BUILD_NUMBER:-1}"
 SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://github.com/Jonathanm10/QuotaBar/releases/latest/download/appcast.xml}"
 SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY:-}"
+CODE_SIGN_IDENTITY="${APP_IDENTITY:-}"
 
 if [[ -n "${CI:-}" && "$VERSION" != "0.0.0-dev" && -z "$SPARKLE_PUBLIC_ED_KEY" ]]; then
   echo "SPARKLE_PUBLIC_ED_KEY is required for CI release builds" >&2
@@ -105,6 +106,22 @@ ${SPARKLE_INFO_PLIST_KEYS}
 </dict>
 </plist>
 EOF
+
+if [[ -z "$CODE_SIGN_IDENTITY" ]] && security find-certificate -c "QuotaBar Development" >/dev/null 2>&1; then
+  CODE_SIGN_IDENTITY="QuotaBar Development"
+fi
+
+if [[ -z "$CODE_SIGN_IDENTITY" ]]; then
+  CODE_SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk -F '"' '/Developer ID Application|Apple Development/ { print $2; exit }')"
+fi
+
+if [[ -n "$CODE_SIGN_IDENTITY" ]]; then
+  codesign --force --deep --timestamp=none --options runtime --sign "$CODE_SIGN_IDENTITY" "$APP_DIR"
+  echo "Signed $APP_DIR with '$CODE_SIGN_IDENTITY'"
+else
+  echo "warning: no code signing identity found; build will remain ad-hoc signed and Keychain Always Allow may not persist" >&2
+  echo "warning: run ./Scripts/setup_dev_signing.sh and trust the QuotaBar Development certificate for stable local signing" >&2
+fi
 
 SMOKE_SNAPSHOT="$ARTIFACTS_DIR/package-smoke.png"
 rm -f "$SMOKE_SNAPSHOT"
