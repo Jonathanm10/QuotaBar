@@ -68,7 +68,7 @@ Default project posture:
 
 Validation expectations:
 
-- Run `swift test` for core logic changes.
+- Run `swift run QuotaBarCoreTests` for core logic changes.
 - Run `swift build` for build, packaging, or app-target changes.
 - Run `./Scripts/package_app.sh` when changes affect the app bundle, resources, entitlements, signing inputs, or runtime launch behavior.
 - If app behavior changes, include a concrete manual validation note describing the menu bar/popover path that was exercised.

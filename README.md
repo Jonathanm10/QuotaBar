@@ -77,7 +77,7 @@ If those local sessions do not exist, the app can still build and tests will sti
 
 ```bash
 swift build
-swift test
+swift run QuotaBarCoreTests
 swift run QuotaBar
 ```
 

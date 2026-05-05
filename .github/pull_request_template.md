@@ -9,7 +9,7 @@ Describe the change and the problem it solves.
 ## Verification
 
 - [ ] `swift build`
-- [ ] `swift test`
+- [ ] `swift run QuotaBarCoreTests`
 
 ## Risks
 

@@ -21,7 +21,7 @@ Core commands:
 
 ```bash
 swift build
-swift test
+swift run QuotaBarCoreTests
 swift run QuotaBar
 ```
 
@@ -44,7 +44,7 @@ Please:
 - keep changes focused on one concern
 - add or update tests for behavior changes
 - update docs when setup, behavior, or contribution workflow changes
-- run `swift build` and `swift test` before opening the PR
+- run `swift build` and `swift run QuotaBarCoreTests` before opening the PR
 
 ## Style Notes
 

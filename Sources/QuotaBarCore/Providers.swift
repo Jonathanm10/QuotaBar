@@ -23,6 +23,10 @@ public struct RefreshReport: Equatable, Sendable {
         self.snapshots = snapshots
         self.failures = failures
     }
+
+    public func failuresWithoutSnapshots(attachedProviders: Set<ProviderID>) -> [ProviderRefreshFailure] {
+        self.failures.filter { !attachedProviders.contains($0.provider) }
+    }
 }
 
 public actor RefreshCoordinator {

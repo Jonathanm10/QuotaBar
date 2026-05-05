@@ -235,7 +235,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if !report.snapshots.isEmpty {
             self.state.lastRefreshAt = Date()
         }
-        self.state.lastError = self.errorSummary(for: report.failures)
+        let unattachedFailures = report.failuresWithoutSnapshots(attachedProviders: Set(self.state.snapshots.keys))
+        self.state.lastError = self.errorSummary(for: unattachedFailures)
         let snapshots = self.state.orderedSnapshots
         if !report.snapshots.isEmpty {
             do {
