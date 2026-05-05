@@ -37,7 +37,7 @@ EOF
 )"
 fi
 
-swift build -c release --arch arm64 --arch x86_64
+swift build -c release --product QuotaBar --arch arm64 --arch x86_64
 
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR" "$ARTIFACTS_DIR"
