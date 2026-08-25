@@ -84,6 +84,9 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
     public let daily: UsageWindow?
     public let weekly: UsageWindow?
     public let reserve: ReserveMetric?
+    /// Additional model- or surface-scoped windows (e.g. a per-model weekly limit).
+    /// Optional so caches written before this field existed still decode.
+    public let extraWindows: [UsageWindow]?
     public let source: String
     public let fetchedAt: Date
     public let warning: String?
@@ -93,6 +96,7 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         daily: UsageWindow?,
         weekly: UsageWindow?,
         reserve: ReserveMetric?,
+        extraWindows: [UsageWindow]? = nil,
         source: String,
         fetchedAt: Date,
         warning: String? = nil
@@ -101,9 +105,14 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
         self.daily = daily
         self.weekly = weekly
         self.reserve = reserve
+        self.extraWindows = extraWindows
         self.source = source
         self.fetchedAt = fetchedAt
         self.warning = warning
+    }
+
+    public var additionalWindows: [UsageWindow] {
+        extraWindows ?? []
     }
 
     public func markingRefreshFailure(_ failure: ProviderRefreshFailure) -> ProviderSnapshot {
@@ -112,6 +121,7 @@ public struct ProviderSnapshot: Codable, Equatable, Sendable {
             daily: daily,
             weekly: weekly,
             reserve: reserve,
+            extraWindows: extraWindows,
             source: source,
             fetchedAt: fetchedAt,
             warning: "\(provider.displayName) refresh failed: \(failure.message)"

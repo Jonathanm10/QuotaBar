@@ -46,10 +46,13 @@ public enum Formatting {
         includesWeekly: Bool = true,
         showRemaining: Bool = false
     ) -> String {
-        let dailyText = formatPercent(snapshot.daily?.usedPercent, showRemaining: showRemaining)
-        guard includesWeekly else { return dailyText }
-        let weeklyText = formatPercent(snapshot.weekly?.usedPercent, showRemaining: showRemaining)
-        return "\(dailyText)/\(weeklyText)"
+        var parts = [formatPercent(snapshot.daily?.usedPercent, showRemaining: showRemaining)]
+        if includesWeekly {
+            parts.append(formatPercent(snapshot.weekly?.usedPercent, showRemaining: showRemaining))
+        }
+        // Scoped windows (e.g. a per-model weekly limit) only appear when actually fetched.
+        parts += snapshot.additionalWindows.map { formatPercent($0.usedPercent, showRemaining: showRemaining) }
+        return parts.joined(separator: "/")
     }
 
     private static func formatPercent(_ used: Double?, showRemaining: Bool) -> String {

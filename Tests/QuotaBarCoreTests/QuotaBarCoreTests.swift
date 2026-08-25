@@ -115,6 +115,56 @@ final class QuotaBarCoreTests: @unchecked Sendable {
         XCTAssert(decoded.sevenDay?.utilization == 2.0)
     }
 
+    func testAnthropicUsageDecodesScopedLimits() throws {
+        let json = """
+        {
+          "five_hour": { "utilization": 6.0, "resets_at": "2026-08-25T16:09:59.930588+00:00" },
+          "seven_day": { "utilization": 15.0, "resets_at": "2026-08-31T07:59:59.930611+00:00" },
+          "seven_day_opus": null,
+          "tangelo": null,
+          "limits": [
+            { "kind": "session", "group": "session", "percent": 6, "severity": "normal",
+              "resets_at": "2026-08-25T16:09:59.930588+00:00", "scope": null, "is_active": false },
+            { "kind": "weekly_all", "group": "weekly", "percent": 15, "severity": "normal",
+              "resets_at": "2026-08-31T07:59:59.930611+00:00", "scope": null, "is_active": false },
+            { "kind": "weekly_scoped", "group": "weekly", "percent": 26, "severity": "normal",
+              "resets_at": "2026-08-31T07:59:59.930933+00:00",
+              "scope": { "model": { "id": null, "display_name": "Fable" }, "surface": null }, "is_active": true }
+          ]
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(AnthropicUsageResponse.self, from: Data(json.utf8))
+        let snapshot = try AnthropicProvider.makeSnapshot(from: decoded, now: Date(timeIntervalSince1970: 1))
+
+        XCTAssert(snapshot.daily?.usedPercent == 6)
+        XCTAssert(snapshot.weekly?.usedPercent == 15)
+        XCTAssert(snapshot.additionalWindows.count == 1)
+        XCTAssert(snapshot.additionalWindows.first?.label == "Fable")
+        XCTAssert(snapshot.additionalWindows.first?.usedPercent == 26)
+        XCTAssert(snapshot.additionalWindows.first?.sourceWindowMinutes == 10_080)
+        XCTAssert(snapshot.additionalWindows.first?.resetsAt != nil)
+    }
+
+    func testAnthropicSnapshotIgnoresUnscopedLimits() throws {
+        let json = """
+        {
+          "five_hour": { "utilization": 6.0, "resets_at": null },
+          "seven_day": { "utilization": 15.0, "resets_at": null },
+          "limits": [
+            { "kind": "session", "group": "session", "percent": 6, "scope": null },
+            { "kind": "weekly_all", "group": "weekly", "percent": 15, "scope": null },
+            { "kind": "weekly_scoped", "group": "weekly", "percent": 40, "scope": { "model": null, "surface": "cowork" } }
+          ]
+        }
+        """
+
+        let decoded = try JSONDecoder().decode(AnthropicUsageResponse.self, from: Data(json.utf8))
+        let snapshot = try AnthropicProvider.makeSnapshot(from: decoded, now: Date(timeIntervalSince1970: 1))
+        XCTAssert(snapshot.additionalWindows.isEmpty)
+        XCTAssert(snapshot.extraWindows == nil)
+    }
+
     func testSnapshotStoreRoundTrips() async throws {
         let root = URL(filePath: NSTemporaryDirectory()).appending(path: UUID().uuidString)
         let store = SnapshotStore(appSupportRoot: root)
@@ -123,6 +173,7 @@ final class QuotaBarCoreTests: @unchecked Sendable {
             daily: UsageWindow(label: "5h", usedPercent: 10, sourceWindowMinutes: 300, resetsAt: Date(timeIntervalSince1970: 1), source: .oauth, note: nil),
             weekly: nil,
             reserve: nil,
+            extraWindows: [UsageWindow(label: "Fable", usedPercent: 26, sourceWindowMinutes: 10_080, resetsAt: nil, source: .oauth)],
             source: "oauth",
             fetchedAt: Date(timeIntervalSince1970: 2)
         )
@@ -130,6 +181,20 @@ final class QuotaBarCoreTests: @unchecked Sendable {
         try await store.save([snapshot])
         let loaded = try await store.load()
         XCTAssert(loaded == [snapshot])
+    }
+
+    func testSnapshotDecodesLegacyEnvelopeWithoutExtraWindows() throws {
+        let json = """
+        {
+          "snapshots": [
+            { "provider": "anthropic", "daily": null, "weekly": null, "reserve": null,
+              "source": "oauth", "fetchedAt": 0, "warning": null }
+          ]
+        }
+        """
+        let envelope = try JSONDecoder().decode(SnapshotEnvelope.self, from: Data(json.utf8))
+        XCTAssert(envelope.snapshots.first?.extraWindows == nil)
+        XCTAssert(envelope.snapshots.first?.additionalWindows.isEmpty == true)
     }
 
     func testCompactUsageFormatsUsedPercents() {
@@ -142,6 +207,21 @@ final class QuotaBarCoreTests: @unchecked Sendable {
             fetchedAt: .now
         )
         XCTAssert(Formatting.compactUsage(snapshot) == "3%/15%")
+    }
+
+    func testCompactUsageAppendsScopedWindow() {
+        let snapshot = ProviderSnapshot(
+            provider: .anthropic,
+            daily: UsageWindow(label: "5h", usedPercent: 3.4, sourceWindowMinutes: 300, resetsAt: nil, source: .oauth),
+            weekly: UsageWindow(label: "Weekly", usedPercent: 14.6, sourceWindowMinutes: 10080, resetsAt: nil, source: .oauth),
+            reserve: nil,
+            extraWindows: [UsageWindow(label: "Fable", usedPercent: 26, sourceWindowMinutes: 10080, resetsAt: nil, source: .oauth)],
+            source: "oauth",
+            fetchedAt: .now
+        )
+        XCTAssert(Formatting.compactUsage(snapshot) == "3%/15%/26%")
+        XCTAssert(Formatting.compactUsage(snapshot, includesWeekly: false) == "3%/26%")
+        XCTAssert(Formatting.compactUsage(snapshot, showRemaining: true) == "97%/85%/74%")
     }
 
     func testStartupRefreshGateSkipsFreshCache() {
@@ -315,8 +395,12 @@ enum QuotaBarCoreTestRunner {
             TestCase("openAIRefreshDecodeFailureDescriptionIncludesBody", suite.testOpenAIRefreshDecodeFailureDescriptionIncludesBody),
             TestCase("openAIUsageFailureDescriptionIncludesServerBody", suite.testOpenAIUsageFailureDescriptionIncludesServerBody),
             TestCase("anthropicUsageDecodesWindows", suite.testAnthropicUsageDecodesWindows),
+            TestCase("anthropicUsageDecodesScopedLimits", suite.testAnthropicUsageDecodesScopedLimits),
+            TestCase("anthropicSnapshotIgnoresUnscopedLimits", suite.testAnthropicSnapshotIgnoresUnscopedLimits),
             TestCase("snapshotStoreRoundTrips", suite.testSnapshotStoreRoundTrips),
+            TestCase("snapshotDecodesLegacyEnvelopeWithoutExtraWindows", suite.testSnapshotDecodesLegacyEnvelopeWithoutExtraWindows),
             TestCase("compactUsageFormatsUsedPercents", suite.testCompactUsageFormatsUsedPercents),
+            TestCase("compactUsageAppendsScopedWindow", suite.testCompactUsageAppendsScopedWindow),
             TestCase("startupRefreshGateSkipsFreshCache", suite.testStartupRefreshGateSkipsFreshCache),
             TestCase("refreshPolicyFailureBackoffRespectsFiveMinuteFloor", suite.testRefreshPolicyFailureBackoffRespectsFiveMinuteFloor),
             TestCase("refreshPolicyMenuOpenBypassesSuccessThrottle", suite.testRefreshPolicyMenuOpenBypassesSuccessThrottle),

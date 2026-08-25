@@ -97,6 +97,9 @@ struct ProviderCardView: View {
                 VStack(spacing: 8) {
                     BarRow(title: "Daily", window: snapshot.daily, now: context.date, showRemaining: showRemaining)
                     BarRow(title: "Weekly", window: snapshot.weekly, now: context.date, showRemaining: showRemaining)
+                    ForEach(snapshot.additionalWindows, id: \.label) { window in
+                        BarRow(title: window.label, window: window, now: context.date, showRemaining: showRemaining)
+                    }
                     if let warning = snapshot.warning {
                         WarningBanner(text: warning)
                     }
@@ -140,8 +143,12 @@ struct ProviderCardView: View {
         }
     }
 
+    private var allWindows: [UsageWindow] {
+        [snapshot.daily, snapshot.weekly].compactMap { $0 } + snapshot.additionalWindows
+    }
+
     private var worstUsed: Double {
-        max(snapshot.daily?.usedPercent ?? 0, snapshot.weekly?.usedPercent ?? 0)
+        allWindows.map(\.usedPercent).max() ?? 0
     }
 
     private var badgeValue: Double {
@@ -156,8 +163,7 @@ struct ProviderCardView: View {
 
     private func subtitle(now: Date) -> String {
         let sourceTag = snapshot.source.uppercased()
-        let paces = [snapshot.daily, snapshot.weekly]
-            .compactMap { $0 }
+        let paces = allWindows
             .compactMap { UsagePace.compute(window: $0, now: now) }
         guard let worst = paces.max(by: { $0.deltaPercent < $1.deltaPercent }) else {
             return sourceTag
