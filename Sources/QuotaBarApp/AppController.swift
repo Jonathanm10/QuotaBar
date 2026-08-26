@@ -90,7 +90,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             },
             onQuit: { NSApp.terminate(nil) }
         )
-        self.popover.contentViewController = NSHostingController(rootView: root)
+        let hostingController = NSHostingController(rootView: root)
+        hostingController.sizingOptions = .preferredContentSize
+        self.popover.contentViewController = hostingController
     }
 
     // MARK: - Status item interaction
@@ -280,6 +282,16 @@ final class AppController: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 )
             },
             reserve: nil,
+            extraWindows: snapshot.extraWindows?.map { cachedWindow in
+                UsageWindow(
+                    label: cachedWindow.label,
+                    usedPercent: cachedWindow.usedPercent,
+                    sourceWindowMinutes: cachedWindow.sourceWindowMinutes,
+                    resetsAt: cachedWindow.resetsAt,
+                    source: .cache,
+                    note: cachedWindow.note
+                )
+            },
             source: "cache",
             fetchedAt: snapshot.fetchedAt,
             warning: snapshot.warning

@@ -123,6 +123,11 @@ public struct AnthropicProvider: UsageProvider {
         }
 
         let usage = try JSONDecoder().decode(AnthropicUsageResponse.self, from: data)
+        return try makeSnapshot(from: usage, now: now)
+    }
+
+    /// Pure mapping from the decoded usage payload to the domain snapshot. Exposed for tests.
+    public static func makeSnapshot(from usage: AnthropicUsageResponse, now: Date) throws -> ProviderSnapshot {
         guard let fiveHour = usage.fiveHour, let fiveHourUtilization = fiveHour.utilization else {
             throw AnthropicProviderError.invalidResponse
         }
@@ -144,12 +149,26 @@ public struct AnthropicProvider: UsageProvider {
                 source: .oauth
             )
         }
+        let scopedWindows = (usage.limits ?? []).compactMap { limit -> UsageWindow? in
+            guard limit.kind == "weekly_scoped",
+                  let modelName = limit.scope?.model?.displayName, !modelName.isEmpty,
+                  let percent = limit.percent
+            else { return nil }
+            return UsageWindow(
+                label: modelName,
+                usedPercent: percent,
+                sourceWindowMinutes: 7 * 24 * 60,
+                resetsAt: limit.resetsAtDate,
+                source: .oauth
+            )
+        }
 
         return ProviderSnapshot(
             provider: .anthropic,
             daily: shortWindow,
             weekly: weekly,
             reserve: nil,
+            extraWindows: scopedWindows.isEmpty ? nil : scopedWindows,
             source: "oauth",
             fetchedAt: now
         )
@@ -219,6 +238,41 @@ public struct AnthropicUsageResponse: Codable, Sendable {
     public let fiveHour: UsageWindowPayload?
     public let sevenDay: UsageWindowPayload?
     public let extraUsage: ExtraUsage?
+    public let limits: [Limit]?
+
+    public struct Limit: Codable, Sendable {
+        public let kind: String?
+        public let group: String?
+        public let percent: Double?
+        public let resetsAt: String?
+        public let scope: Scope?
+
+        enum CodingKeys: String, CodingKey {
+            case kind
+            case group
+            case percent
+            case resetsAt = "resets_at"
+            case scope
+        }
+
+        public var resetsAtDate: Date? {
+            resetsAt.flatMap { ISO8601DateFormatter.flexible().date(from: $0) }
+        }
+
+        public struct Scope: Codable, Sendable {
+            public let model: Model?
+        }
+
+        public struct Model: Codable, Sendable {
+            public let id: String?
+            public let displayName: String?
+
+            enum CodingKeys: String, CodingKey {
+                case id
+                case displayName = "display_name"
+            }
+        }
+    }
 
     public struct UsageWindowPayload: Codable, Sendable {
         public let utilization: Double?
@@ -252,6 +306,7 @@ public struct AnthropicUsageResponse: Codable, Sendable {
         case fiveHour = "five_hour"
         case sevenDay = "seven_day"
         case extraUsage = "extra_usage"
+        case limits
     }
 }
 
